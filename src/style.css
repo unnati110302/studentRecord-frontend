@@ -714,3 +714,8 @@ h4 :hover{
 .user-form{
     margin-left: 10%;
 }
+.role-check{
+    margin-left: 0px;
+    display: flex;
+    align-items: center;
+}

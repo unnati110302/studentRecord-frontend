@@ -11,9 +11,17 @@ import { useNavigate } from 'react-router-dom';
 const LoginForm = ({ setName }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [invalid, setInvalid] = useState(false);
   const navigate = useNavigate();
+  const [validationErrors, setValidationErrors] = useState({
+    email: '',
+  });
  
   useEffect(() => {
+    setValidationErrors({
+      email: '',
+    }
+    )
     setEmail('');
     setPassword('');
   }, []);
@@ -39,6 +47,34 @@ const LoginForm = ({ setName }) => {
       console.error('An error occurred during login:', error);
     }
   };
+
+  const handleEmailChange = (e) => {
+      const inputValue = e.target.value;
+      setEmail(inputValue);
+      validateEmail(inputValue);
+  };
+
+  const validateEmail = (value) => {
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        setValidationErrors((prevErrors) => ({
+            ...prevErrors,
+            email: '',
+        }));
+        setInvalid((prevInvalid) => {
+            return false;  
+        });
+    } else {
+        setValidationErrors((prevErrors) => ({
+            ...prevErrors,
+            email: 'Enter a valid user name',
+        }));
+        setInvalid((prevInvalid) => {
+            return true;  
+        });
+    }
+  };
+
+
  
  
   return (
@@ -51,13 +87,16 @@ const LoginForm = ({ setName }) => {
       <h2 className='modal-header heading'>Login</h2>
       <form onSubmit={handleLogin} className='login-form'>
         <div className='form-control2'>
+        {validationErrors.email && (
+              <div className='invalid-feedback'>{validationErrors.email}</div>
+        )}
         <label className='label'>
           Username
           { ' ' }<input
             type="text"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className='login-input'
+            onChange={handleEmailChange} 
+            className={`form-control ${validationErrors.email ? 'is-invalid' : ''}`}
             required
             placeholder="Username"
           />

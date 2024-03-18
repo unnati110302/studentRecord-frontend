@@ -5,13 +5,15 @@ import 'react-toastify/dist/ReactToastify.css';
 import Header from './Header';
 import Footer from './Footer';
 import axios from 'axios';
-import {student_url, api_url} from './configuration';
+import {local_url, student_url, api_url} from './configuration';
 import { useNavigate } from 'react-router-dom';
 import PersonIcon from '@mui/icons-material/Person';
 import BorderColorIcon from '@mui/icons-material/BorderColor';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ConfirmationDialog from './Confirmation';
 import Tooltip from '@mui/material/Tooltip';
-import bcrypt from 'bcryptjs';
+//import bcrypt from 'bcryptjs';
  
  
 const UserManagement = ({userName}) => {
@@ -20,24 +22,40 @@ const UserManagement = ({userName}) => {
     const [data, setData] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const modalRef = useRef();
-
+    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
+    
     const [Name, setName] = useState('');
     const [Email, setEmail] = useState('');
     const [Password, setPassword] = useState('');
     const [IsLocked, setIsLocked] = useState(0);
-    const [SecurityQuestionId, setSecurityQuestionId] = useState(4);
-    const [AnswerId, setAnswerId] = useState(4);
-    const [RoleIds, setRoleIds] = useState('');
+    const [SecurityQuestionId, setSecurityQuestionId] = useState(0);
+    const [Answer, setAnswer] = useState('');
+    const [AnswerId, setAnswerId] = useState(0);
+    const [roleIds, setRoleIds] = useState([]);
+    const [roleName, setRoleName] = useState([]);
+    const [validationErrors, setValidationErrors] = useState({
+      Name: '',
+      Email: '',
+    });
+
     const navigate = useNavigate();
 
+    const [ansId, setAnsId] = useState(0);
+    const [invalid, setInvalid] = useState(false);
     const handleForm = () => setShowForm(true);
     const handleCloseForm = () => {
+      setValidationErrors({
+        Name: '',
+        Email: '',
+      }
+      )
       setName('');
       setEmail('');
       setPassword('');
       setIsLocked(0);
       setSecurityQuestionId(0);
       setAnswerId(0);
+      setRoleIds('');
       setShowForm(false);
       document.body.classList.remove('modal-open');
   };
@@ -46,26 +64,7 @@ const UserManagement = ({userName}) => {
         getData();
     }, []);
 
-    // const handleSubmit =  (e) => {
-    //     e.preventDefault();
-    //     const data = {
-    //         "name" : name,
-    //         "email" : email,
-    //         "password" : password,
-    //         "isLocked" : isLocked,
-    //         "securityQuestionId" : sec_ques,
-    //         "answerId" : sec_ans,
-    //     }
-    //     axios.post(`${api_url}/users`, data)
-    //     .then((result) => {
-    //         navigate('/crud');
-    //         sec_ques++;
-    //         sec_ans++;
-    //     }).catch((error) => {
-    //         console.error('An error occurred during login:', error);
-    //     })
-    //   };
-
+    const answerToIdMap = new Map();
 
     const handleSubmit = (e) => {
       e.preventDefault();      
@@ -79,13 +78,14 @@ const UserManagement = ({userName}) => {
         "securityQuestionId" : SecurityQuestionId,
         "answerId" : AnswerId,
       } 
-      axios.post(`${api_url}/users?Name=${Name}&Email=${Email}&Password=${Password}&IsLocked=${IsLocked}&SecurityQuestionId=${SecurityQuestionId}&AnswerId=${AnswerId}&RoleIds=${RoleIds}`)
+      axios.post(`${api_url}/users?Name=${Name}&Email=${Email}&Password=${Password}&IsLocked=${IsLocked}&SecurityQuestionId=${SecurityQuestionId}&AnswerId=${AnswerId}&RoleIds=${roleIds}`)
       //axios.post(`${api_url}/users`, data)
       .then((result) => {
+          //handleGetRole(id);
           getData();
           clear();
           handleCloseForm();
-          toast.success('User has been added');
+          //toast.success('User has been added');
       }).catch((error) => {
           console.error('An error occurred during login:', error);
       })
@@ -97,7 +97,7 @@ const UserManagement = ({userName}) => {
       setPassword('');
       setIsLocked(0);
       setSecurityQuestionId(0);
-      setAnswerId(0);
+      setAnswerId('');
     }
       const handleCheckboxChange = (id) => {
         const updatedSelectedRows = [...selectedRows];
@@ -135,7 +135,229 @@ const UserManagement = ({userName}) => {
     const handleEdit = () =>{
       console.log("edit");
     }
-     
+
+    const handleRoleChange = (roleValue) =>{
+        if(roleIds.includes(roleValue)){
+            setRoleIds(roleIds.filter(role => role !== roleValue))
+        }else{
+            setRoleIds([...roleIds, roleValue])
+        }
+    }
+
+    const handleQuestionChange = (event) => {
+        setSecurityQuestionId(parseInt(event.target.value));
+    }
+    const generateUniqueId = () =>{
+        // const timestamp = new Date().getTime();
+        // return timestamp;
+        return ansId + 1;
+    }
+    const handleUserInput = (userAnswer) =>{
+        setAnswer(userAnswer);
+        if(answerToIdMap.has(userAnswer)){
+            setAnswerId(answerToIdMap.get(userAnswer))
+        }
+        else{
+            const uniqueId = generateUniqueId();
+            answerToIdMap.set(userAnswer, uniqueId);
+            setAnsId(uniqueId);
+            setAnswerId(uniqueId);
+        }
+    }
+
+    const handleMultipleDelete = () => {
+      if (selectedRows.length === 0) {
+          alert('Please select rows to delete.');
+      } else {
+          setIsConfirmationDialogOpen(true);
+      }
+      
+    };
+
+    const confirmDelete = () => {
+            
+        const url = `${local_url}/delete-multiple`;
+    
+        axios
+            .delete(url, { data: selectedRows })
+            .then((result) => {
+            toast.success('Selected students have been deleted');
+            const updatedData = data.filter((item) => !selectedRows.includes(item.id));
+            setData(updatedData);
+            setSelectedRows([]); 
+            })
+            .catch((error) => {
+            console.error('Error deleting students:', error);
+            //toast.error('Error deleting students');
+      })
+      .finally(() => {
+          setIsConfirmationDialogOpen(false);
+      });
+    };
+
+    const closeConfirmationDialog = () => {
+        setIsConfirmationDialogOpen(false);
+    };
+
+    const handleGetRole = (id) =>{
+      axios.get(`${local_url}/${id}`)
+      .then((result)=>{
+          setRoleName(result.data[0]);
+      })
+      .catch((error)=>{
+          console.error('Error getting role:', error);
+          //toast.error(error);
+      })
+  }
+
+  const handleNameChange = (e) => {
+    const inputValue = e.target.value;
+    setName(inputValue);
+    validateName(inputValue);
+  };
+
+  const handleEmailChange = (e) => {
+      const inputValue = e.target.value;
+      setEmail(inputValue);
+      validateEmail(inputValue);
+  };
+
+
+  const validateName = (value) => {
+      if (value.trim() !== '') {
+          if (/^[a-zA-Z\s]+$/.test(value)) {
+              setValidationErrors((prevErrors) => ({
+                  ...prevErrors,
+                  Name: '',
+              }));
+              setInvalid((prevInvalid) => {
+                  return false;  
+              });
+          } else {
+              setValidationErrors((prevErrors) => ({
+                  ...prevErrors,
+                  Name: 'Name should contain only alphabets',
+              }));
+              setInvalid((prevInvalid) => {
+                  return true;  
+              });
+          }
+      } else {
+          setValidationErrors((prevErrors) => ({
+              ...prevErrors,
+              Name: 'Name should not be blank',
+          }));
+          setInvalid((prevInvalid) => {
+              return true;  
+          });
+      }
+  };
+
+  const validateEmail = (value) => {
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          setValidationErrors((prevErrors) => ({
+              ...prevErrors,
+              Email: '',
+          }));
+          setInvalid((prevInvalid) => {
+              return false;  
+          });
+      } else {
+          setValidationErrors((prevErrors) => ({
+              ...prevErrors,
+              Email: 'Enter a valid email address',
+          }));
+          setInvalid((prevInvalid) => {
+              return true;  
+          });
+      }
+  };
+
+
+  // const validateEditName = (value) => {
+  //     if (value.trim() !== '') {
+  //         if (/^[a-zA-Z\s]+$/.test(value)) {
+  //             setValidationErrors((prevErrors) => ({
+  //                 ...prevErrors,
+  //                 editName: '',
+  //             }));
+  //             setInvalid((prevInvalid) => {
+  //                 return false;  
+  //             });
+  //         } else {
+  //             setValidationErrors((prevErrors) => ({
+  //                 ...prevErrors,
+  //                 editName: 'Name should contain only alphabets',
+  //             }));
+  //             setInvalid((prevInvalid) => {
+  //                 return true;  
+  //             });
+  //         }
+  //     } else {
+  //         setValidationErrors((prevErrors) => ({
+  //             ...prevErrors,
+  //             editName: 'Name should not be blank',
+  //         }));
+  //         setInvalid((prevInvalid) => {
+  //             return true;  
+  //         });
+  //     }
+  // };
+
+  // const validateEditEmail = (value) => {
+  //     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+  //         setValidationErrors((prevErrors) => ({
+  //             ...prevErrors,
+  //             editEmail: '',
+  //         }));
+  //         setInvalid((prevInvalid) => {
+  //             return false;  
+  //         });
+  //     } else {
+  //         setValidationErrors((prevErrors) => ({
+  //             ...prevErrors,
+  //             editEmail: 'Enter a valid email address',
+  //         }));
+  //         setInvalid((prevInvalid) => {
+  //             return true;  
+  //         });
+  //     }
+  // };
+
+  // const validateEditPassword = (value) => {
+  //     if ("?=^.{8,}$)((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$".test(value)) {
+  //         setValidationErrors((prevErrors) => ({
+  //             ...prevErrors,
+  //             editPassword: '',
+  //         }));
+  //         setInvalid((prevInvalid) => {
+  //             return false;  
+  //         });
+  //     } else {
+  //         if (/^\d{10}$/.test(value)) {
+  //             setValidationErrors((prevErrors) => ({
+  //                 ...prevErrors,
+  //                 editMobile: 'Mobile number should start from 6, 7, 8, or 9',
+  //             }));
+  //         } else if (/^\d+$/.test(value)) {
+  //             setValidationErrors((prevErrors) => ({
+  //                 ...prevErrors,
+  //                 editMobile: 'Mobile number should be of 10 digits',
+  //             }));
+  //         } else {
+  //             setValidationErrors((prevErrors) => ({
+  //                 ...prevErrors,
+  //                 editMobile: 'Mobile number should only contain digits',
+  //             }));
+  //         }
+  //         setInvalid((prevInvalid) => {
+  //             return true;  
+  //         });
+  //     }
+  // };
+
+
+
     
   return (
     <>
@@ -160,6 +382,15 @@ const UserManagement = ({userName}) => {
             <Tooltip title='Add User'><button type="button" className="custom-btn custom-btn-primary" onClick={handleAddButtonClick}>
             <AddIcon />
             </button></Tooltip>
+            <Tooltip title='Delete'><button type="button" className="custom-btn custom-btn-danger"
+             onClick={handleMultipleDelete} disabled={selectedRows.length === 0}>
+            <DeleteIcon />
+            </button></Tooltip>
+            <ConfirmationDialog
+                isOpen={isConfirmationDialogOpen}
+                onClose={closeConfirmationDialog}
+                onConfirm={confirmDelete}
+            />
         </div>
       </div>
     {/* <div className="dropdown-container user-navbar">
@@ -179,12 +410,18 @@ const UserManagement = ({userName}) => {
         </div>
         <div className='modal-body'>
           <div className="custom-col">
-                <input type='text' className='form-control' placeholder='Enter Name' value={Name}
-                onChange = {(e)=> setName(e.target.value)} />
+          {validationErrors.Name && (
+              <div className='invalid-feedback'>{validationErrors.Name}</div>
+          )}
+          <input type='text' className={`form-control ${validationErrors.Name ? 'is-invalid' : ''}`} placeholder='Enter name' value={Name} 
+          onChange={handleNameChange}/>
           </div>
           <div className="custom-col">
-                <input type='text' className='form-control' placeholder='Enter Email' value={Email}
-                onChange = {(e)=> setEmail(e.target.value)} />
+          {validationErrors.Email && (
+              <div className='invalid-feedback'>{validationErrors.Email}</div>
+          )}
+          <input type='text' className={`form-control ${validationErrors.Email ? 'is-invalid' : ''}`} placeholder='Enter email' value={Email}
+          onChange={handleEmailChange} />
           </div>
           <div className="custom-col">
                 <input type='text' className='form-control' placeholder='Enter Passord' value={Password}
@@ -195,12 +432,17 @@ const UserManagement = ({userName}) => {
                 <label>IsLocked</label>
           </div> */}
           <div className="custom-col">
-                <input type='text' className='form-control' placeholder='Enter QuestionId' value={SecurityQuestionId}
-                onChange = {(e)=> setSecurityQuestionId(parseInt(e.target.value)|| 0)} />
+               <label htmlFor='questionSelect'>Security question </label>
+               <select id='questionSelect' value={SecurityQuestionId} onChange={handleQuestionChange}>
+                    <option value="0">- -</option>
+                    <option value="1">What is the name of your first school?</option>
+                    <option value="2">Who is your Favourite author?</option>
+                    <option value="3">Where were you born?</option>
+               </select>
           </div>
           <div className="custom-col">
-                <input type='text' className='form-control' placeholder='Enter Name' value={AnswerId}
-                onChange = {(e)=> setAnswerId(parseInt(e.target.value)|| 0)} />
+                <input type='text' className='form-control' placeholder='Enter your answer' value={Answer}
+                onChange = {(e)=> handleUserInput(e.target.value)} />
           </div>
           {/* <div className="custom-col">
           <select className="form-control" value={RoleIds} 
@@ -210,10 +452,17 @@ const UserManagement = ({userName}) => {
                     
                 </select>
           </div> */}
-          <div className="custom-col">
-                <input type='text' className='form-control' placeholder='Enter RoleId' value={RoleIds}
-                onChange = {(e)=> setRoleIds(e.target.value)} />
-          </div>
+          <div className="custom-col roles">
+            <label >Roles:</label>
+            <label className='role-check'>
+                <input type="checkbox" value="1" checked={roleIds.includes("1")} onChange={() => handleRoleChange("1")} />
+                Admin
+            </label>
+            <label className='role-check'>
+                <input type="checkbox" value="2" checked={roleIds.includes("2")} onChange={() => handleRoleChange("2")} />
+                User
+            </label>
+        </div>
         </div>
         <div className='modal-footer'>
                 <button className='custom-btn custom-btn-secondary-close' onClick={handleCloseForm}>
@@ -243,6 +492,7 @@ const UserManagement = ({userName}) => {
                 <th>Email</th>
                 <th>Password</th> 
                 {/* <th>IsLocked</th> */}
+                {/* <th>Role</th> */}
                 <th>SecurityQuestionId</th>
                 <th>AnswerId</th>
                 <th>Actions</th>
@@ -268,6 +518,7 @@ const UserManagement = ({userName}) => {
                                     <td>{item.email}</td>
                                     <td>{item.password}</td>
                                     {/* <td>{item.isLocked==0?"False":"True"}</td> */}
+                                    {/* <td>{roleName}</td> */}
                                     <td>{item.securityQuestionId}</td>
                                     <td>{item.answerId}</td>
                                     <td colSpan={2}>
