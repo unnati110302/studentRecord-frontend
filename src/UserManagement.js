@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef} from 'react';
+import React, { useState, Fragment,useEffect, useRef} from 'react';
 import './style.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -13,45 +13,59 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ConfirmationDialog from './Confirmation';
 import Tooltip from '@mui/material/Tooltip';
+import * as forge from 'node-forge';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { encodeBase64 } from 'bcryptjs';
+import {replacePlusWithEncoded} from './UtilityFunctions';
 //import bcrypt from 'bcryptjs';
  
  
-const UserManagement = ({userName}) => {
+const UserManagement = ({ userName, role }) => {
 
     const [selectedRows, setSelectedRows] = useState([]);
     const [data, setData] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const modalRef = useRef();
     const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
     
     const [Name, setName] = useState('');
     const [Email, setEmail] = useState('');
     const [Password, setPassword] = useState('');
+    const [ConfirmPassword, setConfirmPassword] = useState('');
     const [IsLocked, setIsLocked] = useState(0);
     const [SecurityQuestionId, setSecurityQuestionId] = useState(0);
     const [Answer, setAnswer] = useState('');
     const [AnswerId, setAnswerId] = useState(0);
     const [roleIds, setRoleIds] = useState([]);
-    const [roleName, setRoleName] = useState([]);
+    const [roles, setRole] = useState('');
     const [validationErrors, setValidationErrors] = useState({
       Name: '',
       Email: '',
+      Password: '',
+      ConfirmPassword: '',
     });
 
     const navigate = useNavigate();
 
     const [ansId, setAnsId] = useState(0);
     const [invalid, setInvalid] = useState(false);
+    const [passwordVisible, setPasswordVisible] = useState(false);
+
     const handleForm = () => setShowForm(true);
     const handleCloseForm = () => {
       setValidationErrors({
         Name: '',
         Email: '',
+        Password: '',
+        ConfirmPassword: '',
       }
       )
       setName('');
       setEmail('');
       setPassword('');
+      setConfirmPassword('');
       setIsLocked(0);
       setSecurityQuestionId(0);
       setAnswerId(0);
@@ -66,29 +80,70 @@ const UserManagement = ({userName}) => {
 
     const answerToIdMap = new Map();
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async(e) => {
       e.preventDefault();      
-      // const hashedPassword = bcrypt.hashSync(Password);
-
-      const data = {
-        "name" : Name,
-        "email" : Email,
-        "password" : Password,
-        "isLocked" : IsLocked,
-        "securityQuestionId" : SecurityQuestionId,
-        "answerId" : AnswerId,
-      } 
-      axios.post(`${api_url}/users?Name=${Name}&Email=${Email}&Password=${Password}&IsLocked=${IsLocked}&SecurityQuestionId=${SecurityQuestionId}&AnswerId=${AnswerId}&RoleIds=${roleIds}`)
-      //axios.post(`${api_url}/users`, data)
-      .then((result) => {
-          //handleGetRole(id);
+      const publicKey =`-----BEGIN PUBLIC KEY-----MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDE3/DkbE+9QX8UDShJD+DALJryS3L3shC/a8i0+O1H54sVcfdVQrwH3PpIZSORy7fkDzx2IXXXMkToq9rt6cZ5fiG1ortNIQEkg2wD2Sk8Go7I4fS9A+TpMBiV8cO4c51ROV2P6QdvWMC+LC2is7+a4ihMR8Wl621Iw90nWVkAZwIDAQAB-----END PUBLIC KEY-----`;
+      var rsa = forge.pki.publicKeyFromPem(publicKey); 
+      console.log(rsa);
+      var encryptedPassword = window.btoa(rsa.encrypt(Password));
+      console.log(Password);
+      console.log(encryptedPassword);
+      const encoded = replacePlusWithEncoded(encryptedPassword);
+      try{
+          const token = await getToken();
+          const config = {
+              headers: {
+                  'Authorization': `Bearer ${token}`
+              }
+          };
+          const result = await axios.post(`${api_url}/users?Name=${Name}&Email=${Email}&Password=${encoded}&IsLocked=${IsLocked}&SecurityQuestionId=${SecurityQuestionId}&AnswerId=${AnswerId}&role=${roleIds}`, {}, config);
+          console.log("response:", result.data); 
+          console.log(encoded);
           getData();
           clear();
           handleCloseForm();
-          //toast.success('User has been added');
-      }).catch((error) => {
-          console.error('An error occurred during login:', error);
-      })
+          toast.success('User has been added');
+      }catch(error){
+          toast.error('An error occurred in adding the user', error);
+      }
+    };
+
+    const getToken = async () => {
+        const url = `${local_url}/login`;
+        const data = {
+            "email": "unnati@gmail.com",
+            "password": "Unnati@1",
+        };
+     
+        try {
+            const result = await axios.post(url, data);
+            const token = result.data.accessToken;
+            //console.log(token);
+            return token;
+        } catch (error) {
+            console.error('Error fetching token:', error);
+            throw new Error('Failed to fetch token');
+        }
+    };
+
+    const authorizedFetch = async (url, options = {}) => {
+        try {
+            const token = await getToken();
+            if (!options.headers) {
+                options.headers = {};
+            }
+            options.headers.Authorization = `Bearer ${token}`;
+            const response = await fetch(url, options);
+     
+            if (response.status === 401) {
+                throw new Error('Unauthorized');
+            }
+     
+            return response;
+        } catch (error) {
+            console.error('Error in authorizedFetch:', error);
+            throw error;
+        }
     };
 
     const clear = () =>{
@@ -117,14 +172,20 @@ const UserManagement = ({userName}) => {
         setSelectedRows(selectedIds);
       };
 
-      const getData = () =>{
-        axios.get(`${api_url}/users`)
-        .then((result)=>{
-            setData(result.data)
-        })
-        .catch((error)=>{
+      const getData = async() =>{
+        try{
+        const result = await authorizedFetch(`${api_url}/users`);
+        console.log("response:", result);
+        const data = await result.json();
+        setData(data)
+        //axios.get(`${api_url}/users`)
+        // .then((result)=>{
+        //     setData(result.data)
+        // })
+        }
+        catch(error){
             console.log(error)
-        })
+        }
     }
 
     const handleAddButtonClick=() =>{
@@ -171,44 +232,34 @@ const UserManagement = ({userName}) => {
       } else {
           setIsConfirmationDialogOpen(true);
       }
-      
+     
     };
-
+ 
     const confirmDelete = () => {
-            
+           
         const url = `${local_url}/delete-multiple`;
-    
+   
         axios
             .delete(url, { data: selectedRows })
             .then((result) => {
-            toast.success('Selected students have been deleted');
+            toast.success('Selected users have been deleted');
             const updatedData = data.filter((item) => !selectedRows.includes(item.id));
             setData(updatedData);
-            setSelectedRows([]); 
+            setSelectedRows([]);
             })
             .catch((error) => {
             console.error('Error deleting students:', error);
-            //toast.error('Error deleting students');
+            toast.error('Error deleting users');
       })
       .finally(() => {
           setIsConfirmationDialogOpen(false);
       });
     };
-
+ 
     const closeConfirmationDialog = () => {
         setIsConfirmationDialogOpen(false);
     };
-
-    const handleGetRole = (id) =>{
-      axios.get(`${local_url}/${id}`)
-      .then((result)=>{
-          setRoleName(result.data[0]);
-      })
-      .catch((error)=>{
-          console.error('Error getting role:', error);
-          //toast.error(error);
-      })
-  }
+ 
 
   const handleNameChange = (e) => {
     const inputValue = e.target.value;
@@ -216,12 +267,21 @@ const UserManagement = ({userName}) => {
     validateName(inputValue);
   };
 
+  const togglePasswordVisibility = () => {
+    setPasswordVisible(!passwordVisible);
+  };
+
   const handleEmailChange = (e) => {
       const inputValue = e.target.value;
       setEmail(inputValue);
       validateEmail(inputValue);
   };
-
+   
+  const handlePasswordChange = (e) => {
+    const inputValue = e.target.value;
+    setPassword(inputValue);
+    validatePassword(inputValue);
+  };
 
   const validateName = (value) => {
       if (value.trim() !== '') {
@@ -251,7 +311,7 @@ const UserManagement = ({userName}) => {
               return true;  
           });
       }
-  };
+    };
 
   const validateEmail = (value) => {
       if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
@@ -271,100 +331,65 @@ const UserManagement = ({userName}) => {
               return true;  
           });
       }
+    };
+
+    const validatePassword = (value) => {
+        if (value.length < 8) {
+          setValidationErrors((prevErrors) => ({
+            ...prevErrors,
+            Password: 'Password should be at least 8 characters long',
+          }));
+          setInvalid(true);
+        } else if (!/[A-Z]/.test(value)) {
+          setValidationErrors((prevErrors) => ({
+            ...prevErrors,
+            Password: 'Password should contain at least one uppercase character',
+          }));
+          setInvalid(true);
+        } 
+        else {
+          setValidationErrors((prevErrors) => ({
+            ...prevErrors,
+            Password: '',
+          }));
+          setInvalid(false);
+        }
+    };
+
+  const handleConfirmPasswordChange = (event) => {
+    setConfirmPassword(event.target.value);
+    if (event.target.value !== Password) {
+      setErrorMessage('Passwords do not match');
+    } else {
+      setErrorMessage('');
+    }
   };
 
-
-  // const validateEditName = (value) => {
-  //     if (value.trim() !== '') {
-  //         if (/^[a-zA-Z\s]+$/.test(value)) {
-  //             setValidationErrors((prevErrors) => ({
-  //                 ...prevErrors,
-  //                 editName: '',
-  //             }));
-  //             setInvalid((prevInvalid) => {
-  //                 return false;  
-  //             });
-  //         } else {
-  //             setValidationErrors((prevErrors) => ({
-  //                 ...prevErrors,
-  //                 editName: 'Name should contain only alphabets',
-  //             }));
-  //             setInvalid((prevInvalid) => {
-  //                 return true;  
-  //             });
-  //         }
-  //     } else {
-  //         setValidationErrors((prevErrors) => ({
-  //             ...prevErrors,
-  //             editName: 'Name should not be blank',
-  //         }));
-  //         setInvalid((prevInvalid) => {
-  //             return true;  
-  //         });
-  //     }
-  // };
-
-  // const validateEditEmail = (value) => {
-  //     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-  //         setValidationErrors((prevErrors) => ({
-  //             ...prevErrors,
-  //             editEmail: '',
-  //         }));
-  //         setInvalid((prevInvalid) => {
-  //             return false;  
-  //         });
-  //     } else {
-  //         setValidationErrors((prevErrors) => ({
-  //             ...prevErrors,
-  //             editEmail: 'Enter a valid email address',
-  //         }));
-  //         setInvalid((prevInvalid) => {
-  //             return true;  
-  //         });
-  //     }
-  // };
-
-  // const validateEditPassword = (value) => {
-  //     if ("?=^.{8,}$)((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$".test(value)) {
-  //         setValidationErrors((prevErrors) => ({
-  //             ...prevErrors,
-  //             editPassword: '',
-  //         }));
-  //         setInvalid((prevInvalid) => {
-  //             return false;  
-  //         });
-  //     } else {
-  //         if (/^\d{10}$/.test(value)) {
-  //             setValidationErrors((prevErrors) => ({
-  //                 ...prevErrors,
-  //                 editMobile: 'Mobile number should start from 6, 7, 8, or 9',
-  //             }));
-  //         } else if (/^\d+$/.test(value)) {
-  //             setValidationErrors((prevErrors) => ({
-  //                 ...prevErrors,
-  //                 editMobile: 'Mobile number should be of 10 digits',
-  //             }));
-  //         } else {
-  //             setValidationErrors((prevErrors) => ({
-  //                 ...prevErrors,
-  //                 editMobile: 'Mobile number should only contain digits',
-  //             }));
-  //         }
-  //         setInvalid((prevInvalid) => {
-  //             return true;  
-  //         });
-  //     }
-  // };
-
-
+  const renderViewAsOptions = () => {
+    if (role.includes('Admin') && role.includes('User')) {
+        return (
+            <>
+                {/* <a href="#">View as admin</a> */}
+                <button className='render' onClick={()=>{navigate('/user')}}>View as user</button>
+            </>
+        );
+    // } else if (role.includes('Admin')) {
+    //     return <a className='render' href="#">View as Admin</a>;
+    } else if (role.includes('User')) {
+        return <button className='render' onClick={()=>{navigate('/user')}}>View as User</button>;
+    } else {
+        return null; 
+    }
+};
 
     
   return (
-    <>
+    <Fragment>
+        <ToastContainer />
     <div>
         <Header></Header>
     </div>
-    <div className='mid-body'>
+    <div>
         <div className='ad'>
         <div className="navbar">
         <div className="navbar-heading">User Record</div>
@@ -372,25 +397,28 @@ const UserManagement = ({userName}) => {
             <div className="dropdown">
                 <button className="dropbtn u"><PersonIcon className='icon'/><h4>{userName}</h4></button>
                 <div className="dropdown-content">
-                    <a href="http://localhost:3000/">Logout</a>
+                    <button className='render' onClick={()=>{navigate('/')}}>Logout</button>
+                    <button className='render' onClick={()=>{navigate('/crud')}}>Student record</button>
+                    {renderViewAsOptions()}
                 </div>
             </div>
         </div>
         </div>
         </div>
         <div className="navbar-buttons">
-            <Tooltip title='Add User'><button type="button" className="custom-btn custom-btn-primary" onClick={handleAddButtonClick}>
+            <Tooltip title='Add User'><span><button type="button" className="custom-btn custom-btn-primary" onClick={handleAddButtonClick}>
             <AddIcon />
-            </button></Tooltip>
-            <Tooltip title='Delete'><button type="button" className="custom-btn custom-btn-danger"
+            </button></span></Tooltip>
+            <Tooltip title='Delete'><span><button type="button" className="custom-btn custom-btn-danger"
              onClick={handleMultipleDelete} disabled={selectedRows.length === 0}>
             <DeleteIcon />
-            </button></Tooltip>
+            </button></span></Tooltip>
             <ConfirmationDialog
                 isOpen={isConfirmationDialogOpen}
                 onClose={closeConfirmationDialog}
                 onConfirm={confirmDelete}
             />
+            <div className='viewingAs'><h4>Viewing as Admin</h4></div>
         </div>
       </div>
     {/* <div className="dropdown-container user-navbar">
@@ -423,9 +451,30 @@ const UserManagement = ({userName}) => {
           <input type='text' className={`form-control ${validationErrors.Email ? 'is-invalid' : ''}`} placeholder='Enter email' value={Email}
           onChange={handleEmailChange} />
           </div>
+          <div className="custom-col" style={{ position: 'relative' }}>
+            {validationErrors.Password && (
+              <div className='invalid-feedback'>{validationErrors.Password}</div>
+            )}
+            <div id='pass' style={{ position: 'relative' }}> 
+              <input
+                type={passwordVisible ? 'text' : 'password'}
+                className={`form-control ${validationErrors.Password ? 'is-invalid' : ''}`}
+                placeholder='Enter password'
+                value={Password}
+                onChange={handlePasswordChange}
+                style={{ paddingRight: '5px' }} 
+              />
+              <span 
+                className="password-toggle" 
+                onClick={togglePasswordVisibility}
+              >
+                <FontAwesomeIcon icon={passwordVisible ? faEyeSlash : faEye} />
+              </span>
+            </div> 
+          </div>
           <div className="custom-col">
-                <input type='text' className='form-control' placeholder='Enter Passord' value={Password}
-                onChange = {(e)=> setPassword(e.target.value)} />
+            {errorMessage && <div style={{ color: 'red' }}>{errorMessage}</div>}
+            <input id='confirm-pass' type="password" value={ConfirmPassword} onChange={handleConfirmPasswordChange} placeholder="Confirm Password" />
           </div>
           {/* <div className="custom-col" id='isActive-checkbox'>
                 <input className='check' type="checkbox" checked={IsLocked} onChange={(e)=> setIsLocked(e.target.checked)} />
@@ -452,16 +501,18 @@ const UserManagement = ({userName}) => {
                     
                 </select>
           </div> */}
-          <div className="custom-col roles">
+          <div className="custom-col">
+            <div className='roles'>
             <label >Roles:</label>
             <label className='role-check'>
                 <input type="checkbox" value="1" checked={roleIds.includes("1")} onChange={() => handleRoleChange("1")} />
-                Admin
+                &nbsp;Admin
             </label>
             <label className='role-check'>
                 <input type="checkbox" value="2" checked={roleIds.includes("2")} onChange={() => handleRoleChange("2")} />
-                User
+                &nbsp;User
             </label>
+           </div>
         </div>
         </div>
         <div className='modal-footer'>
@@ -490,9 +541,9 @@ const UserManagement = ({userName}) => {
                 <th>S.No.</th>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Password</th> 
+                {/* <th>Password</th>  */}
                 {/* <th>IsLocked</th> */}
-                {/* <th>Role</th> */}
+                <th>Role</th>
                 <th>SecurityQuestionId</th>
                 <th>AnswerId</th>
                 <th>Actions</th>
@@ -516,13 +567,13 @@ const UserManagement = ({userName}) => {
                                     <td>{index+1}</td>
                                     <td>{item.name}</td>
                                     <td>{item.email}</td>
-                                    <td>{item.password}</td>
+                                    {/* <td>{item.password}</td> */}
                                     {/* <td>{item.isLocked==0?"False":"True"}</td> */}
-                                    {/* <td>{roleName}</td> */}
+                                    <td>{item.role}</td>
                                     <td>{item.securityQuestionId}</td>
                                     <td>{item.answerId}</td>
                                     <td colSpan={2}>
-                                    <Tooltip title="Edit Details"><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>  {handleEdit(item.id);}}><BorderColorIcon /></button> </Tooltip>&nbsp;
+                                    <Tooltip title="Edit Details"><span><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>  {handleEdit(item.id);}}><BorderColorIcon /></button></span></Tooltip>&nbsp;
                                     </td>
                                 </tr>
                             )
@@ -536,7 +587,7 @@ const UserManagement = ({userName}) => {
     <div>
         <Footer></Footer>
     </div>
-    </>
+    </Fragment>
   )
 }
  

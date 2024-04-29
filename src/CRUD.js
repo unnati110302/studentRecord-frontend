@@ -1,5 +1,4 @@
-
-import React, {useState, useEffect, Fragment, useRef} from 'react';
+import React, {useState, useEffect, Fragment, useRef  } from 'react';
 import './style.css';
 import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
@@ -20,10 +19,11 @@ import SaveIcon from '@mui/icons-material/Save';
 import Tooltip from '@mui/material/Tooltip';
 import SearchBar from './SearchBar';
 import * as XLSX from 'xlsx';
-import PersonIcon from '@mui/icons-material/Person';
 import { useNavigate } from 'react-router-dom';
+import PersonIcon from '@mui/icons-material/Person';
 
-const CRUD = ( {userName}) => {
+
+const CRUD = ({ userName, role }) => {
 
     const [show, setShow] = useState(false);
 
@@ -33,15 +33,12 @@ const CRUD = ( {userName}) => {
 
     const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
 
-    const [isLoading, setIsLoading] = useState(false);
-
     const [pageNumber, setPageNumber] = useState(1);
     const [totalPages, setTotalPages] = useState(1); 
     const [pageSize, setPageSize] = useState(5);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortOrder, setSortOrder] = useState(''); 
-    const [sortAttribute, setSortAttribute] = useState('');
- 
+    const [sortAttribute, setSortAttribute] = useState(''); 
 
     const [validationErrors, setValidationErrors] = useState({
         name: '',
@@ -77,6 +74,9 @@ const CRUD = ( {userName}) => {
         setGender(2);
         setStatus(4);
         setIsActive(0);
+        setCourseId(0);
+        setClassId(0);
+        setSectionId(0);
         setShowForm(false);
         document.body.classList.remove('modal-open');
     };
@@ -97,6 +97,9 @@ const CRUD = ( {userName}) => {
     const[createdOn, setCon] = useState('');
     const[modifiedBy, setMby] = useState(0);
     const[modifiedOn, setMon] = useState('');
+    const[courseId, setCourseId] = useState('');
+    const[classId, setClassId] = useState('');
+    const[sectionId, setSectionId] = useState('');
 
     const[EditId, setEditId] = useState('');
     const[EditCode, setEditCode] = useState('');
@@ -114,9 +117,15 @@ const CRUD = ( {userName}) => {
     const[EditCon, setEditCon] = useState('');
     const[EditMby, setEditMby] = useState(0);
     const[EditMon, setEditMon] = useState('');
+    const[EditCourseId, setEditCourseId] = useState('');
+    const[EditClassId, setEditClassId] = useState('');
+    const[EditSectionId, setEditSectionId] = useState('');
 
     const [states, setStates] = useState([]);
     const [cities, setCities] = useState([]);
+    const [courses, setCourses] = useState([]);
+    const [classes, setClasses] = useState([]);    
+    const [sections, setSections] = useState([]);    
     const [data, setData] = useState([]);
     const [stateName, setStateName] = useState('');
     const [cityName, setCityName] = useState('');
@@ -127,8 +136,9 @@ const CRUD = ( {userName}) => {
 
     useEffect(() => {
         getStates();
+        getCourses();
         getData(pageNumber, pageSize, searchTerm, sortAttribute, sortOrder);
-    
+   
         const handleDocumentClick = (event) => {
             const modalContainer = modalRef.current;
             if (modalContainer && !modalContainer.contains(event.target)) {
@@ -136,13 +146,14 @@ const CRUD = ( {userName}) => {
                 handleClose();
             }
         };
-    
+   
         document.addEventListener('mousedown', handleDocumentClick);
-    
+   
         return () => {
             document.removeEventListener('mousedown', handleDocumentClick);
         };
     }, [pageNumber, pageSize, searchTerm, sortAttribute, sortOrder]);
+
 
     const getStates = async () => {
         try {
@@ -162,26 +173,96 @@ const CRUD = ( {userName}) => {
         }
     };
 
-    const getData = (pageNumber, pageSize, search = '', sortAttribute = '', sortOrder= '' ,shouldExport = false) =>{
-        axios.get(`${student_url}?pageNumber=${pageNumber}&pageSize=${pageSize}&search=${searchTerm}&sortAttribute=${sortAttribute}&sortOrder=${sortOrder}`)
-        .then((result)=>{
-            setData(result.data.data)
-            setCode(result.data.data[0]?.code);    
-            setTotalPages(result.data.totalPages);
-        
-        // if (shouldExport) {
-        //     exportToExcel(result.data.data, 'Student_Record');
-        // }
-        })
-        .catch((error)=>{
-            console.log(error)
-        })
+    const getCourses = async()=>{
+        try {
+            const response = await axios.get(`${api_url}/courses`);
+            setCourses(response.data);
+          } catch (error) {
+            console.error('Error fetching courses:', error);
+          }
     }
+
+
+    let toastId = null; 
+
+    const getData = async(pageNumber, pageSize, search = '', sortAttribute = '', sortOrder= '' ,shouldExport = false) =>{
+        try {
+            const result = await authorizedFetch(`${student_url}?pageNumber=${pageNumber}&pageSize=${pageSize}&search=${searchTerm}&sortAttribute=${sortAttribute}&sortOrder=${sortOrder}`)
+            console.log("response:", result);
+            const data = await result.json();
+            if(data.title === "Not Found"){
+                if (!toastId) {
+                    toastId = toast.error("No such record");
+                }
+            }
+            else{
+                setData(data.data)
+                setCode(data.data[0]?.code);    
+                setTotalPages(data.totalPages);
+            }
+       
+        if (shouldExport) {
+            exportToExcel(result.data.data, 'Student_Record');
+        }
+        }
+        catch(error){
+            console.log(error)
+        }
+    }
+
+    const getClassByCourse = async(id) =>{
+        console.log(id);
+        try{
+        const result = await axios.get(`${api_url}/class/bycourse/${id}`);
+        console.log("response:", result.data);
+        setClasses(result.data);
+        //setData(data);
+        }
+        catch (error) {
+            if (error.response && error.response.status === 404) {
+                console.log("No classes found for the given course.");
+                setClasses([]); 
+                setSections([]);
+            } else {
+                console.log(error);
+            }
+        }
+    }
+ 
+    const getSections = async(id) =>{
+        console.log(id);
+        try{
+        const result = await axios.get(`${api_url}/section/byclass/${id}`);
+        console.log("response:", result);
+        setSections(result.data);         
+        }
+        catch (error) {
+            if (error.response && error.response.status === 404) {
+                console.log("No sections found for the given class.");
+                setSections([]);
+            } else {
+                console.log(error);
+            }
+        }
+    }
+
+    const handleSearch = (searchTerm) => {
+        setSearchTerm(searchTerm);
+        setPageNumber(1); 
+        getData(1, pageSize, searchTerm, sortOrder);
+    };
+    
+    const exportToExcel = (data, fileName) => {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+        XLSX.writeFile(wb, `${fileName}.xlsx`);
+    };
 
     const handleSorting = (attribute) =>{
         // if(sortAttribute === attribute){
         //     setSortOrder(sortOrder==='' ? 'asc' : (sortOrder === 'asc' ? 'desc' : 'asc'));
-      
+     
         let newSortOrder;
         if (sortAttribute === attribute) {
             newSortOrder = sortOrder === '' ? 'asc' : (sortOrder === 'asc' ? 'desc' : 'asc');
@@ -189,36 +270,15 @@ const CRUD = ( {userName}) => {
             newSortOrder = '';
         }
         getData(pageNumber, pageSize, searchTerm, attribute, newSortOrder);
-
+ 
         setSortAttribute(attribute);
         setSortOrder(newSortOrder);
-
+ 
     }
 
-    const handleSearch = (searchTerm) => {
-        setSearchTerm(searchTerm);
-        setPageNumber(1); 
-        getData(1, pageSize, searchTerm, sortAttribute, sortOrder);
+    const handleExportClick = () => {
+        getData(pageNumber, pageSize, searchTerm, sortAttribute, sortOrder, true);
     };
-
-    const handleExportClick = async () => {
-        setIsLoading(true);
-        try {
-          const response = await axios.get(`${local_url}/excel`, {
-            responseType: 'blob' // Specify the response type as blob
-          });
-          const url = window.URL.createObjectURL(new Blob([response.data]));
-          const link = document.createElement('a');
-          link.href = url;
-          link.setAttribute('download', 'Students.xlsx');
-          document.body.appendChild(link);
-          link.click();
-          setIsLoading(false);
-        } catch (error) {
-          console.error('Error exporting to Excel:', error);
-          setIsLoading(false);
-        }
-      };
 
     const handlePrevious = () => {
         if (pageNumber > 1) {
@@ -247,32 +307,38 @@ const CRUD = ( {userName}) => {
         ));
       };
 
-    const handleEdit = (id) =>{
+
+    const handleEdit = async(id) =>{
         handleShow(); 
         document.body.classList.add('modal-open');
-        axios.get(`${student_url}/${id}`)
-        .then((result)=>{
-            setEditCode(result.data.code);
-            setEditName(result.data.name);
-            setEditEmail(result.data.email);
-            setEditMob(result.data.mobile);
-            setEditAdd1(result.data.address1);
-            setEditAdd2(result.data.address2);
-            setEditState(result.data.state);
-            setEditCity(result.data.city);
-            setEditGender(result.data.gender);
-            setEditStatus(result.data.status);
-            setEditIsActive(result.data.isActive);
-            setEditCby(result.data.createdBy);
-            setEditCon(result.data.createdOn);
-            setEditMby(result.data.modifiedBy);
-            setEditMon(result.data.modifiedOn);
+        try {
+            const result = await authorizedFetch(`${student_url}/${id}`)
+            console.log("response:", result);
+            const data = await result.json();
+            setEditCode(data.code);
+            setEditName(data.name);
+            setEditEmail(data.email);
+            setEditMob(data.mobile);
+            setEditAdd1(data.address1);
+            setEditAdd2(data.address2);
+            setEditState(data.state);
+            setEditCity(data.city);
+            setEditGender(data.gender);
+            setEditStatus(data.status);
+            setEditCourseId(data.courseId);
+            setEditClassId(data.classId);
+            setEditSectionId(data.sectionId);
+            setEditIsActive(data.isActive);
+            setEditCby(data.createdBy);
+            setEditCon(data.createdOn);
+            setEditMby(data.modifiedBy);
+            setEditMon(data.modifiedOn);
             setEditId(id);
-        })
-        .catch((error)=>{
+        }
+        catch(error){
             console.error('Error editing student:', error);
             toast.error(error);
-        })
+        }
     }
 
     const handleCheckboxChange = (id) => {
@@ -320,7 +386,8 @@ const CRUD = ( {userName}) => {
         setIsConfirmationDialogOpen(false);
     };
 
-    const handleUpdate = () =>{
+    const handleUpdate = async() =>{
+     try{
         const url = `${student_url}/${EditId}`
         const data = {
             "id": EditId,
@@ -334,29 +401,38 @@ const CRUD = ( {userName}) => {
             "city": EditCity,
             "gender": EditGender,
             "status":  EditStatus,
+            "courseId": EditCourseId,
+            "classId": EditClassId,
+            "sectionId": EditSectionId,
             "isActive": EditIsActive,
             "createdBy": EditCby,
             "createdOn": EditCon,
             "modifiedBy": EditMby,
             "modifiedOn": EditMon,
         }
-        axios.put(url, data)
-        .then((result) => {
-            getData(pageNumber, pageSize, searchTerm, sortAttribute, sortOrder);
+        const token = await getToken();
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        const result = await axios.put(url, data, config);
+            getData(pageNumber, pageSize, searchTerm, sortOrder);
             clear();
             handleClose();
             toast.success('Student has been updated');
-        }).catch((error)=>{
+        }catch(error){
             if(invalid){
                 toast.error('Invalid details')
             }
             else{
                 toast.error('A record with the same email or mobile number already exists.');
             }
-        })
+        }
     }
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async(e) => {
+        try{
         e.preventDefault();      
         const currentDate = new Date().toISOString();
         const url = student_url;
@@ -371,29 +447,39 @@ const CRUD = ( {userName}) => {
             "city": city,
             "gender": gender,
             "status":  status,
-            "isActive": isActive,
+            "courseId": courseId,
+            "classId": classId,
+            "sectionId": sectionId,
+            "isActive": 1,
             "createdBy": 1, 
             "createdOn": currentDate, 
             "modifiedBy": 1,  
             "modifiedOn": currentDate,
         } 
-        axios.post(url, data)
-        .then((result) => {
-            const generatedCode = result.data.code;
-            setCode(generatedCode);
-            getData(pageNumber, pageSize, searchTerm, sortAttribute, sortOrder);
-            clear();
-            handleCloseForm();
-            toast.success('Student has been added');
-        }).catch((error) => {
+        const token = await getToken();
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        const result = await axios.post(url, data, config);
+        const response = await result.data;
+        const generatedCode = response.code;
+        setCode(generatedCode);
+        getData(pageNumber, pageSize, searchTerm, sortOrder);
+        clear();
+        handleCloseForm();
+        toast.success('Student has been added');
+        }catch(error){
             if(invalid==true){
                 toast.error('Invalid details');
             }
             else{
                 toast.error('A record with the same email or mobile number already exists.');
             }
-        })
+        }
     };
+
 
     const clear = () =>{
         setCode('');
@@ -406,6 +492,9 @@ const CRUD = ( {userName}) => {
         setCity(0);
         setGender(2);
         setStatus(4);
+        setCourseId(0);
+        setClassId(0);
+        setSectionId(0);
         setIsActive(0);
         setCby(0);
         setCon('');
@@ -422,12 +511,71 @@ const CRUD = ( {userName}) => {
         setEditCity(0);
         setEditGender(0);
         setEditStatus(0);
+        setEditCourseId(0);
+        setEditClassId(0);
+        setEditSectionId(0);
         setEditIsActive(0);
         setEditCby(0);
         setEditCon('');
         setEditMby(0);
         setEditMon('');
     }
+
+    const renderViewAsOptions = () => {
+        if (role.includes('Admin') && role.includes('User')) {
+            return (
+                <>
+                    <button className='render' onClick={()=>{navigate('/user')}}>View as user</button>
+                    <button className='render' onClick={()=>{navigate('/teacher')}}>Teacher Records</button>
+                    <button className='render' onClick={()=>{navigate('/course')}}>Courses</button>
+                </>
+            );
+        // } else if (role.includes('Admin')) {
+        //     return <a href="#">View as Admin</a>;
+        } else if (role.includes('User')) {
+            return <button className='render' onClick={()=>{navigate('/user')}}>View as User</button>;
+        } else {
+            return null; 
+        }
+    };
+
+    const getToken = async () => {
+        const url = `${local_url}/login`;
+        const data = {
+            "email": "unnati@gmail.com",
+            "password": "Unnati@1",
+        };
+     
+        try {
+            const result = await axios.post(url, data);
+            const token = result.data.accessToken;
+            //console.log(token);
+            return token;
+        } catch (error) {
+            console.error('Error fetching token:', error);
+            throw new Error('Failed to fetch token');
+        }
+    };
+
+    const authorizedFetch = async (url, options = {}) => {
+        try {
+            const token = await getToken();
+            if (!options.headers) {
+                options.headers = {};
+            }
+            options.headers.Authorization = `Bearer ${token}`;
+            const response = await fetch(url, options);
+     
+            if (response.status === 401) {
+                throw new Error('Unauthorized');
+            }
+     
+            return response;
+        } catch (error) {
+            console.error('Error in authorizedFetch:', error);
+            throw error;
+        }
+    };
 
     const handleAddButtonClick=() =>{
          handleForm(); 
@@ -465,14 +613,6 @@ const CRUD = ( {userName}) => {
         }
     }
 
-    const handleSelectAll = (event) => {
-        const checked = event.target.checked;
-        const selectedIds = checked ? data.map(item => item.id) : [];
-    
-        setSelectedRows(selectedIds);
-    };
-    
-
     const handleNameChange = (e) => {
         const inputValue = e.target.value;
         setName(inputValue);
@@ -489,6 +629,13 @@ const CRUD = ( {userName}) => {
         const inputValue = e.target.value;
         setMob(inputValue);
         validateMobile(inputValue);
+    };
+
+    const handleSelectAll = (event) => {
+        const checked = event.target.checked;
+        const selectedIds = checked ? data.map(item => item.id) : [];
+    
+        setSelectedRows(selectedIds);
     };
 
     const validateName = (value) => {
@@ -668,37 +815,47 @@ const CRUD = ( {userName}) => {
         <div className='ad'>
         <div className="navbar">
         <div className="navbar-heading">Student Record</div>
+        {/* <div className='user'>
+        <PersonIcon className='icon'/>
+        <div className="dropdown-content2">
+            <a href="#">Logout</a>
+        </div>
+        <h4>{userName}</h4>
+        </div> */}
         <div className="dropdown-container">
             <div className="dropdown">
                 <button className="dropbtn u"><PersonIcon className='icon'/><h4>{userName}</h4></button>
                 <div className="dropdown-content">
-                    <a href="http://localhost:3000/">Logout</a>
+                    <button className='render' onClick={()=>{navigate('/')}}>Logout</button>
+                    <button  className='render' onClick={()=>{navigate('/userManagement')}}>User Records</button>
+                    {renderViewAsOptions()}
                 </div>
             </div>
         </div>
         </div>
         </div>
         <div className="navbar-buttons">
-            <Tooltip title='Add Student'><button type="button" className="custom-btn custom-btn-primary" onClick={handleAddButtonClick}>
+            <Tooltip title='Add Student'><span><button type="button" className="custom-btn custom-btn-primary" onClick={handleAddButtonClick}>
             <AddIcon />
-            </button></Tooltip>
-            <Tooltip title='Delete'><button type="button" className="custom-btn custom-btn-danger"
+            </button></span></Tooltip>
+            <Tooltip title='Delete'><span><button type="button" className="custom-btn custom-btn-danger"
              onClick={handleMultipleDelete} disabled={selectedRows.length === 0}>
             <DeleteIcon />
-            </button></Tooltip>
+            </button></span></Tooltip>
             <ConfirmationDialog
                 isOpen={isConfirmationDialogOpen}
                 onClose={closeConfirmationDialog}
                 onConfirm={confirmDelete}
             />
-            <div className="dropdown-container">
-            <div className="dropdown">
-                <button className="dropbtn a" onClick={()=>{navigate('/userManagement')}}>Add User</button>
-                {/* <div className="dropdown-content">
-                    <a href="http://localhost:3000/">Logout</a>
-                </div> */}
-            </div>
-        </div>
+            {/* <div className="dropdown-container">
+                <div className="dropdown">
+                    <button className="dropbtn a" onClick={()=>{navigate('/userManagement')}}>Add User</button>
+                    <div className="dropdown-content">
+                        <a href="http://localhost:3000/">Logout</a>
+                    </div> 
+                </div>
+            </div> */}
+            <div className='viewingAs'><h4>Viewing as Admin</h4></div>
         <SearchBar handleSearch={handleSearch} />
         <button className='custom-btn custom-btn-primary' onClick={handleExportClick}><SaveIcon /></button>
         </div>
@@ -745,6 +902,7 @@ const CRUD = ( {userName}) => {
                 </div>
                 <div className="custom-col">
                 <select className="form-control" data-dropup-auto="false" value={state} onChange={(e) => {
+                    console.log(e.target.value);
                     setState(e.target.value);
                     getCitiesByState(e.target.value);
                 }}>
@@ -786,27 +944,45 @@ const CRUD = ( {userName}) => {
                     <option value={2}>Separated</option>
                 </select>
                 </div>
-                <div className="custom-col" id='isActive-checkbox'>
-                <input className='check' type="checkbox" checked={isActive === 1 ? true : false} onChange={(e)=> handleActiveChange(e)} value={isActive} />
-                <label>Is Active</label>
+                <div className="custom-col">
+                <select className="form-control" data-dropup-auto="false" value={courseId} onChange={(e) => {
+                    console.log(e.target.value);
+                    setCourseId(e.target.value);
+                    getClassByCourse(e.target.value);
+                }}>
+                    <option value="">--Select Course--</option>
+                    {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                        {course.name}
+                    </option>
+                    ))}
+                </select>
                 </div>
-                {/* <Col>
-                <input type='number' className='form-control' placeholder='Created by' value={createdBy} 
-                onChange={ (e) => setCby(e.target.value)}  />
-                </Col>
-            </Row><Row>
-                <Col>
-                <input type='datetime-local' className='form-control' placeholder='Created on' value={createdOn}
-                onChange={ (e) => setCon(e.target.value)}/>
-                </Col>
-                <Col>
-                <input type='number' className='form-control' placeholder='Modified by' value={modifiedBy} 
-                onChange={ (e) => setMby(e.target.value)}/>
-                </Col>
-                <Col>
-                <input type='datetime-local' className='form-control' placeholder='Modified on' value={modifiedOn} 
-                onChange={ (e) => setMon(e.target.value)}/>
-                </Col> */}
+                <div className="custom-col">
+                <select className="form-control" value={classId} 
+                onChange={(e) => {
+                setClassId(e.target.value)
+                getSections(e.target.value);
+                }}>
+                    <option value="">--Select Class--</option>
+                    {classes.map((clas) => (
+                    <option key={clas.id} value={clas.id}>
+                        {clas.name}
+                    </option>
+                    ))}
+                </select>
+                </div>    
+                <div className="custom-col">
+                <select className="form-control" value={sectionId} 
+                onChange={(e) => setSectionId(e.target.value)}>
+                    <option value="">--Select Section--</option>
+                    {sections.map((section) => (
+                    <option key={section.id} value={section.id}>
+                        {section.name}
+                    </option>
+                    ))}
+                </select>
+                </div>        
             </div>
             <div className='modal-footer'>
                 <button className='custom-btn custom-btn-secondary-close' onClick={handleCloseForm}>
@@ -852,13 +1028,13 @@ const CRUD = ( {userName}) => {
                 </th>
                 <th>Mobile</th>
                 <th onClick={() => handleSorting('address1')} className="sortable-header">
-                    <span className="header-text">Address1</span>
+                    <span className="header-text">Address 1</span>
                     <span className='aero'>
                         {sortAttribute !== 'address1'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
                     </span>
                 </th>
                 <th onClick={() => handleSorting('address2')} className="sortable-header">
-                    <span className="header-text">Address2</span>
+                    <span className="header-text">Address 2</span>
                     <span className='aero'>
                         {sortAttribute !== 'address2'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
                     </span>
@@ -877,11 +1053,9 @@ const CRUD = ( {userName}) => {
                 </th>
                 <th>Gender</th>
                 <th>Marital Status</th>
-                {/* <th>IsActive</th> */}
-                {/* <th>Created By</th>
-                <th>Created On</th>
-                <th>Modified By</th>
-                <th>Modified On</th> */}
+                <th>Course</th>
+                <th>Class</th>
+                <th>Section</th>
                 <th>Actions</th>
                 </tr>
             </thead>
@@ -890,7 +1064,6 @@ const CRUD = ( {userName}) => {
                     data && data.length >0?
                         data.map((item, index)=>{
                             const serialNumber = startIndex + index + 1;
-                             
                             return(
                                 <tr key={serialNumber}>
                                     <td>
@@ -912,13 +1085,11 @@ const CRUD = ( {userName}) => {
                                     <td>{item.cityName}</td>
                                     <td>{item.gender === 0 ? "Male" : "Female"}</td>
                                     <td>{mapStatusValueToLabel(item.status)}</td>
-                                    {/* <td>{item.isActive}</td> */}
-                                    {/* <td>{item.createdBy}</td>
-                                    <td>{item.createdOn}</td>
-                                    <td>{item.modifiedBy}</td>
-                                    <td>{item.modifiedOn}</td> */}
+                                    <td>{item.courseName}</td>
+                                    <td>{item.className}</td>
+                                    <td>{item.sectionName}</td>
                                     <td colSpan={2}>
-                                    <Tooltip title="Edit Details"><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() => {getCitiesByState(item.state); handleEdit(item.id);}}><BorderColorIcon /></button> </Tooltip>&nbsp;
+                                    <Tooltip title="Edit Details"><span><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() => {getCitiesByState(item.state); getClassByCourse(item.courseId); getSections(item.classId); handleEdit(item.id);}}><BorderColorIcon /></button></span></Tooltip>&nbsp;
                                         {/* <button className='btn btn-danger' onClick={() => handleDelete(item.id)}>Delete</button> */}
                                     </td>
                                 </tr>
@@ -1038,8 +1209,50 @@ const CRUD = ( {userName}) => {
                 onChange={(e) => {setEditGender(parseInt(e.target.value));}} /> Female
                 </div>
                 <br></br>
+                <div className="custom-col">
+                <label>Course : </label>
+                <select className="form-control" data-dropup-auto="false" value={EditCourseId} onChange={(e) => {
+                    console.log(e.target.value);
+                    setEditCourseId(e.target.value);
+                    getClassByCourse(e.target.value);
+                }}>
+                    <option value="">--Select Course--</option>
+                    {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                        {course.name}
+                    </option>
+                    ))}
+                </select>
+                </div>
+                <div className="custom-col">
+                <label>Class : </label>
+                <select className="form-control" value={EditClassId} 
+                onChange={(e) => {
+                setEditClassId(e.target.value)
+                getSections(e.target.value);
+                }}>
+                    <option value="">--Select Class--</option>
+                    {classes.map((clas) => (
+                    <option key={clas.id} value={clas.id}>
+                        {clas.name}
+                    </option>
+                    ))}
+                </select>
+                </div>    
+                <div className="custom-col">
+                <label>Section : </label>
+                <select className="form-control" value={EditSectionId} 
+                onChange={(e) => setEditSectionId(e.target.value)}>
+                    <option value="">--Select Section--</option>
+                    {sections.map((section) => (
+                    <option key={section.id} value={section.id}>
+                        {section.name}
+                    </option>
+                    ))}
+                </select>
+                </div>    
                 <div className="custom-col" id='m-status'>
-                <label>Marital: <br></br>Status</label><select
+                <label>Marital:<br></br>Status</label><select
                     id="status"
                     value={EditStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
@@ -1049,29 +1262,7 @@ const CRUD = ( {userName}) => {
                     <option value={1}>Married</option>
                     <option value={2}>Separated</option>
                 </select>
-                </div>
-                {/* <Col>
-                <input className='check' type='checkbox'  checked={isActive === 1 ? true : false}
-                onChange={(e) => {handleEditActiveChange(e)}} value={EditIsActive}/>
-                <label>Is Active</label>
-                </Col> */}
-                {/* <Col> */}
-                {/* Created By<input type='number' className='form-control' placeholder='Created by' value={EditCby}
-                onChange={ (e) => setEditCby(e.target.value)} readOnly/>
-                </Col>
-            </Row><Row>
-                <Col>
-                Created On<input type='datetime-local' className='form-control' placeholder='Created on' value={EditCon}
-                onChange={ (e) => setEditCon(e.target.value)} readOnly/>
-                </Col>
-                <Col>
-                Modified By<input type='number' className='form-control' placeholder='Modified by' value={EditMby}
-                onChange={ (e) => setEditMby(e.target.value)} readOnly/>
-                </Col>
-                <Col>
-                Modified On<input type='datetime-local' className='form-control' placeholder='Modified on' value={EditMon}
-                onChange={ (e) => setEditMon(e.target.value)} readOnly/>
-                </Col> */}
+                </div>          
            </div>
             <div className='modal-footer'>
                 <button  className='custom-btn custom-btn-secondary-close' onClick={handleClose}>
@@ -1080,7 +1271,7 @@ const CRUD = ( {userName}) => {
                 <button className='custom-btn custom-btn-primary' onClick={handleUpdate}>
                     Save
                 </button>
-            </div>
+                </div>
         </div>
         )}
         </div>
@@ -1093,5 +1284,3 @@ const CRUD = ( {userName}) => {
 }
 
 export default CRUD;
-
-
