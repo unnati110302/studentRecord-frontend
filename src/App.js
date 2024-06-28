@@ -14,6 +14,11 @@ import CourseEdit from './CourseEdit';
 import Section from './Sectiont';
 import TeacherSubject from './TeacherSubject';
 import TeacherEditSubject from './TeacherEditSubject';
+import Tree from './Tree';
+import Role from './RoleManagement';
+import Schedule from './Schedule';
+import Schedule2 from './Schedule2';
+import MyCalendar from './MyCalendar';
 
 export const msalConfig = {
   auth: {
@@ -91,6 +96,11 @@ function App() {
         <Route path="/section" element={<Section userName={userName} role={role} classId={classId} />}/>
         <Route path="/teacherSubject" element={<TeacherSubject userName={userName} role={role}/>}/>
         <Route path="/teacherSubject-edit" element={<TeacherEditSubject userName={userName} role={role} tId={tId} />}/>
+        <Route path="/tree" element={<Tree userName={userName} role={role} setId={setId} setClassId={setClassId} />}/>
+        <Route path="/role" element={<Role userName={userName} role={role}/>}/>
+        {/* <Route path="/schedule" element={<Schedule />}/> */}
+        <Route path="/schedule2" element={<Schedule2 userName={userName} role={role}/>}/>
+        <Route path="/calendar" element={<MyCalendar userName={userName} role={role}/>}/>
       </Routes>
     </Router>
     </MsalProvider>

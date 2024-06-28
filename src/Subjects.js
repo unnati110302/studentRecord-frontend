@@ -13,6 +13,9 @@ import AddIcon from '@mui/icons-material/Add';
 import Tooltip from '@mui/material/Tooltip';
 import { useNavigate} from 'react-router-dom';
 import PersonIcon from '@mui/icons-material/Person';
+import { AgGridReact } from 'ag-grid-react'; 
+import "ag-grid-community/styles/ag-grid.css"; 
+import "ag-grid-community/styles/ag-theme-quartz.css"; 
 
 const Subject = ({ userName, role, classId}) =>{
     const [SubjectName, setSubjectName] = useState('');
@@ -30,6 +33,14 @@ const Subject = ({ userName, role, classId}) =>{
     const [selectedRows, setSelectedRows] = useState([]);
 
     const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
+    const [gridApi, setGridApi] = useState(null);
+    const [gridColumnApi, setGridColumnApi] = useState(null);
+
+    const onGridReady = (params) => {
+        console.log("Grid Ready");
+        setGridApi(params.api);
+    };	
+
     const modalRef = useRef();
 
     const [SubjectAdd, setSubjectAdd] = useState(false);
@@ -72,53 +83,6 @@ const Subject = ({ userName, role, classId}) =>{
         } else {
             return null; 
         }
-    };
-
-    const handleCheckboxChange = (id) => {
-        const updatedSelectedRows = [...selectedRows];
-        if (updatedSelectedRows.includes(id)) {
-          const index = updatedSelectedRows.indexOf(id);
-          updatedSelectedRows.splice(index, 1);
-        } else {
-          updatedSelectedRows.push(id);
-        }
-        setSelectedRows(updatedSelectedRows);
-    };
-
-    const handleSelectAll = (event) => {
-        const checked = event.target.checked;
-        const selectedIds = checked ? data.map(item => item.id) : [];
-    
-        setSelectedRows(selectedIds);
-    };
-
-    const handleMultipleDelete = () => {
-        if (!selectedRows || selectedRows.length === 0) {
-            alert('Please select rows to delete.');
-        } else {
-            setIsConfirmationDialogOpen(true);
-        }
-        
-    };
-    const confirmDelete = () => {
-            
-        const url = `${api_url}/delete-subjects`;
-    
-        axios
-            .delete(url, { data: selectedRows })
-            .then((result) => {
-            toast.success('Selected subjects have been deleted');
-            const updatedData = data.filter((item) => !selectedRows.includes(item.id));
-            setData(updatedData);
-            setSelectedRows(prevSelectedRows => prevSelectedRows.filter(id => !selectedRows.includes(id))); 
-            })
-            .catch((error) => {
-            console.error('Error deleting students:', error.message);
-            toast.error('Error deleting students');
-        })
-        .finally(() => {
-            setIsConfirmationDialogOpen(false);
-        });
     };
 
     const closeConfirmationDialog = () => {
@@ -224,6 +188,80 @@ const Subject = ({ userName, role, classId}) =>{
                 toast.error(error.message);
             }
     }
+
+    const handleCheckboxChange = (id) => {
+        console.log("enter");
+        const updatedSelectedRows = [...selectedRows];
+        if (updatedSelectedRows.includes(id)) {
+          const index = updatedSelectedRows.indexOf(id);
+          updatedSelectedRows.splice(index, 1);
+        } else {
+          updatedSelectedRows.push(id);
+        }
+        setSelectedRows(updatedSelectedRows);
+    };
+
+    const handleSelectionChanged = (event) => {
+       if(gridApi){
+        const selectedNodes = gridApi.getSelectedNodes();
+        console.log(selectedNodes);
+        const selectedData = selectedNodes.map(node => node.data);
+        console.log(selectedData);
+        setSelectedRows(selectedData);
+       }
+    };
+
+    const handleMultipleDelete = () => {
+        console.log("open");
+        setIsConfirmationDialogOpen(true);
+        console.log("open");
+    };
+
+    const confirmDelete = () => {
+        console.log(selectedRows);
+        const ids = selectedRows.map(row => row.id); 
+        console.log("ids"+ids);
+        axios.delete(`${api_url}/delete-subjects`, { data: ids })
+            .then(response => {
+                console.log('Selected subjects have been deleted.');
+                const updatedData = data.filter((item)=>!selectedRows.includes(item.id));
+                setData(updatedData);
+                setSelectedRows([]);
+                getSubjects(classId);
+            })
+            .catch(error => {
+                console.error('Error deleting subjects:', error);
+            })
+            .finally(() => {
+                setIsConfirmationDialogOpen(false);
+            });
+    };
+
+
+    const actionsCellRenderer = (params) => {
+    return (
+        <>
+        <button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>{handleEditSubject(params.data.id)}}>Edit</button>
+        </>
+    );
+    };
+
+    const [colDefs, setColDefs] = useState([   
+        { headerCheckboxSelection: true, checkboxSelection: true, onSelectionChanged: () => {
+            const selectedRows = gridApi.api.getSelectedRows();
+            console.log("rows"+selectedRows)
+            const selectedIds = selectedRows.map(row => row.id);
+            console.log("ids"+selectedIds)
+            handleCheckboxChange(selectedIds);
+        }, width: 80 },
+        { headerName: "S.No.", valueGetter: "node.rowIndex + 1", width: 95 },
+        { headerName: "Subject Code", field: "subCode" },
+        { headerName: "Subject Name", field: "name" },
+        { headerName: "Total Lectures", field: "totalLectures" },
+        { headerName: "Actions", cellRenderer: actionsCellRenderer },
+      ]);
+
+
     
 
     return(
@@ -278,56 +316,26 @@ const Subject = ({ userName, role, classId}) =>{
                     </>
                 )}
                 </div>
-                <div className="table-container">
-                <table>
-                <thead>
-                        <tr>
-                        <th id='select-header'>
-                            <input
-                                className='select-checkbox'
-                                type="checkbox"
-                                onChange={handleSelectAll}
-                                checked={selectedRows.length === data.length && data.length !== 0}
-                            />
-                        </th>
-                        <th>S.No.</th>
-                        <th>Subject name</th>
-                        <th>Subject code</th>
-                        <th>Total Lectures</th>
-                        <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {
-                            data && data.length >0?
-                                data.map((item, index)=>{
-                                    
-                                    return(
-                                        <tr key={index}>
-                                            <td>
-                                                <input
-                                                className='select-checkbox'
-                                                type="checkbox"
-                                                checked={selectedRows.includes(item.id)}
-                                                onChange={() => handleCheckboxChange(item.id)}
-                                                />
-                                            </td>
-                                            <td>{index+1}</td>
-                                            <td>{item.name}</td>
-                                            <td>{item.subCode}</td>
-                                            <td>{item.totalLectures}</td>
-                                            <td colSpan={2}>
-                                            <Tooltip title="Edit Details"><span><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>  {handleEditSubject(item.id);}}><BorderColorIcon /></button></span></Tooltip>&nbsp;
-                                            </td>
-                                        </tr>
-                                    )
-                                })
-                                :
-                                'Loading..'
-                        }
-                    </tbody>
-                </table>
-            </div>
+                <div className="ag-theme-quartz" style={{ height: 300 }}>
+                <AgGridReact
+                columnDefs={colDefs}
+                rowData={data}
+                rowSelection="multiple"
+                rowHeight={30}
+                headerHeight={40}
+                pagination={true}
+                paginationPageSize={2}
+                paginationPageSizeSelector={[2, 5, 10, 20, 50, 100]}
+                defaultColDef={{
+                    sortable: true,
+                    width: 280,
+                    filter:true,
+                }}
+                onGridReady={onGridReady}
+                domLayout="autoHeight"
+                onSelectionChanged={handleSelectionChanged}
+                />
+                </div>
             <div>
         {SubjectEdit && (
             <div className='modal-container' ref={modalRef} >
@@ -361,7 +369,7 @@ const Subject = ({ userName, role, classId}) =>{
                     Save
                 </button>
                 </div>
-        </div>
+            </div>
         )}
         </div>           
         </div>

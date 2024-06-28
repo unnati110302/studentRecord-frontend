@@ -63,6 +63,14 @@ const LoginForm = ({ setUserName, setRole}) => {
         //window.location.href = '/CRUD';
         navigate('/crud');
       }
+      else if (result.data.role[0] === "Teacher") {
+        //window.location.href = '/CRUD';
+        navigate('/crud');
+      }
+      else if (result.data.role[0] === "Student") {
+        //window.location.href = '/CRUD';
+        navigate('/schedule2');
+      }
       else if(result.data.role[0] === "User"){
         //window.location.href = '/User';
         navigate('/user');

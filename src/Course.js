@@ -15,6 +15,9 @@ import Tooltip from '@mui/material/Tooltip';
 import SearchBar from './SearchBar';
 import { useNavigate } from 'react-router-dom';
 import PersonIcon from '@mui/icons-material/Person';
+import { AgGridReact } from 'ag-grid-react'; 
+import "ag-grid-community/styles/ag-grid.css"; 
+import "ag-grid-community/styles/ag-theme-quartz.css"; 
 
 const Course = ({ userName, role, setId }) => {
 
@@ -27,6 +30,14 @@ const Course = ({ userName, role, setId }) => {
     const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
     const modalRef = useRef();
     const [invalid, setInvalid] = useState(false);
+    const [gridApi, setGridApi] = useState(null);
+    const [gridColumnApi, setGridColumnApi] = useState(null);
+
+    const onGridReady = (params) => {
+        console.log("Grid Ready");
+        setGridApi(params.api);
+    };
+
 
     const [validationErrors, setValidationErrors] = useState({
         name: '',
@@ -153,50 +164,10 @@ const Course = ({ userName, role, setId }) => {
             navigate('/courseEdit');
         }
         catch(error){
-            console.error('Error editing student:', error);
+            console.error('Error editing course:', error);
             toast.error(error);
         }
     }
-
-    const handleCheckboxChange = (id) => {
-        const updatedSelectedRows = [...selectedRows];
-        if (updatedSelectedRows.includes(id)) {
-          const index = updatedSelectedRows.indexOf(id);
-          updatedSelectedRows.splice(index, 1);
-        } else {
-          updatedSelectedRows.push(id);
-        }
-        setSelectedRows(updatedSelectedRows);
-    };
-
-    const handleMultipleDelete = () => {
-        if (selectedRows.length === 0) {
-            alert('Please select rows to delete.');
-        } else {
-            setIsConfirmationDialogOpen(true);
-        }
-        
-    };
-    const confirmDelete = () => {
-            
-        const url = `${api_url}/delete-courses`;
-    
-        axios
-            .delete(url, { data: selectedRows })
-            .then((result) => {
-            toast.success('Selected courses have been deleted');
-            const updatedData = data.filter((item) => !selectedRows.includes(item.id));
-            setData(updatedData);
-            setSelectedRows([]); 
-            })
-            .catch((error) => {
-            console.error('Error deleting courses:', error);
-            toast.error('Error deleting courses');
-        })
-        .finally(() => {
-            setIsConfirmationDialogOpen(false);
-        });
-    };
 
     const closeConfirmationDialog = () => {
         setIsConfirmationDialogOpen(false);
@@ -254,7 +225,17 @@ const Course = ({ userName, role, setId }) => {
                     <button className='render' onClick={()=>{navigate('/crud')}}>Student Records</button>
                 </>
             );
-        } else if (role.includes('User')) {
+        }
+        else if(role.includes('Admin')){
+            return(
+                <>
+                    <button className='render' onClick={()=>{navigate('/crud')}}>Student record</button>
+                    <button className='render' onClick={()=>{navigate('/teacher')}}>Teacher Records</button>
+                    <button  className='render' onClick={()=>{navigate('/userManagement')}}>User Records</button>
+                    <button className='render' onClick={()=>{navigate('/schedule2')}}>Schedule</button>
+                </>
+            )
+        }  else if (role.includes('User')) {
             return <button className='render' onClick={()=>{navigate('/user')}}>View as User</button>;
         } else {
             return null; 
@@ -264,7 +245,8 @@ const Course = ({ userName, role, setId }) => {
     const handleAddButtonClick=() =>{
         handleForm(); 
         document.body.classList.add('modal-open');
-   }
+    }
+    
     const handleActiveChange = (e) =>{
         if(e.target.checked){
             setIsActive(1);
@@ -280,7 +262,80 @@ const Course = ({ userName, role, setId }) => {
     
         setSelectedRows(selectedIds);
     };
+
+    const handleCheckboxChange = (id) => {
+        console.log("enter");
+        const updatedSelectedRows = [...selectedRows];
+        if (updatedSelectedRows.includes(id)) {
+          const index = updatedSelectedRows.indexOf(id);
+          updatedSelectedRows.splice(index, 1);
+        } else {
+          updatedSelectedRows.push(id);
+        }
+        setSelectedRows(updatedSelectedRows);
+    };
+
+    const handleSelectionChanged = (event) => {
+       if(gridApi){
+        const selectedNodes = gridApi.getSelectedNodes();
+        console.log(selectedNodes);
+        const selectedData = selectedNodes.map(node => node.data);
+        console.log(selectedData);
+        setSelectedRows(selectedData);
+       }
+    };
+
+    const handleMultipleDelete = () => {
+        console.log("open");
+        setIsConfirmationDialogOpen(true);
+        console.log("open");
+    };
+
+    const confirmDelete = () => {
+        console.log(selectedRows);
+        const ids = selectedRows.map(row => row.id); 
+        console.log("ids"+ids);
+        axios.delete(`${api_url}/delete-courses`, { data: ids })
+            .then(response => {
+                console.log('Selected courses have been deleted.');
+                const updatedData = data.filter((item)=>!selectedRows.includes(item.id));
+                setData(updatedData);
+                setSelectedRows([]);
+                getData();
+            })
+            .catch(error => {
+                console.error('Error deleting courses:', error);
+            })
+            .finally(() => {
+                setIsConfirmationDialogOpen(false);
+            });
+    };
+
+    const actionsCellRenderer = (params) => {
+    return (
+        <>
+        <button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>{handleEdit(params.data.id)}}>Edit</button>
+        </>
+    );
+    };
+
+    const [colDefs, setColDefs] = useState([   
+        { headerCheckboxSelection: true, checkboxSelection: true, onSelectionChanged: () => {
+            const selectedRows = gridApi.api.getSelectedRows();
+            console.log("rows"+selectedRows)
+            const selectedIds = selectedRows.map(row => row.id);
+            console.log("ids"+selectedIds)
+            handleCheckboxChange(selectedIds);
+        }, width: 90 },
+        { headerName: "S.No.", valueGetter: "node.rowIndex + 1", width: 200 },
+        { headerName: "Course Name", field: "name" },
+        { headerName: "Actions", cellRenderer: actionsCellRenderer },
+      ]);
     
+      const handleTree = () =>{
+        navigate("/tree");
+      }
+
     return (
         <Fragment>
           <ToastContainer />
@@ -297,7 +352,6 @@ const Course = ({ userName, role, setId }) => {
                 <div className="dropdown-content">
                     <button className='render' onClick={()=>{navigate('/')}}>Logout</button>
                     {renderViewAsOptions()}
-                    <button  className='render' onClick={()=>{navigate('/userManagement')}}>User Records</button>
                 </div>
             </div>
         </div>
@@ -316,6 +370,7 @@ const Course = ({ userName, role, setId }) => {
                 onClose={closeConfirmationDialog}
                 onConfirm={confirmDelete}
             />
+             <div><button className='custom-btn custom-btn-primary' id='tree-btn' onClick={handleTree}>Tree View</button></div>
             <div className='viewingAs'><h4>Viewing as Admin</h4></div>
         </div>
         <div>
@@ -345,51 +400,25 @@ const Course = ({ userName, role, setId }) => {
             </>
         )}
         </div>
-        <div className="table-container">
-        <table>
-        <thead>
-                <tr>
-                <th id='select-header'>
-                     <input
-                        className='select-checkbox'
-                        type="checkbox"
-                        onChange={handleSelectAll}
-                        checked={selectedRows.length === data.length && data.length !== 0}
-                    />
-                </th>
-                <th>S.No.</th>
-                <th>Course name</th>
-                <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {
-                    data && data.length >0?
-                        data.map((item, index)=>{
-                             
-                            return(
-                                <tr key={index}>
-                                    <td>
-                                        <input
-                                        className='select-checkbox'
-                                        type="checkbox"
-                                        checked={selectedRows.includes(item.id)}
-                                        onChange={() => handleCheckboxChange(item.id)}
-                                        />
-                                    </td>
-                                    <td>{index+1}</td>
-                                    <td>{item.name}</td>
-                                    <td colSpan={2}>
-                                    <Tooltip title="Edit Details"><span><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>  {handleEdit(item.id);}}><BorderColorIcon /></button></span></Tooltip>&nbsp;
-                                    </td>
-                                </tr>
-                            )
-                        })
-                        :
-                        'Loading..'
-                }
-            </tbody>
-        </table>
+        <div className="ag-theme-quartz" style={{ height: 300 }}>
+        <AgGridReact
+        columnDefs={colDefs}
+        rowData={data}
+        rowSelection="multiple"
+        rowHeight={30}
+        headerHeight={40}
+        pagination={true}
+        paginationPageSize={2}
+        paginationPageSizeSelector={[2, 5, 10, 20, 50, 100]}
+        defaultColDef={{
+            sortable: true,
+            width: 500,
+            filter:true,
+        }}
+        onGridReady={onGridReady}
+        domLayout="autoHeight"
+        onSelectionChanged={handleSelectionChanged}
+        />
         </div>
         </div>
     <div>

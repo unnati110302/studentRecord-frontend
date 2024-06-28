@@ -18,6 +18,9 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import { encodeBase64 } from 'bcryptjs';
 import {replacePlusWithEncoded} from './UtilityFunctions';
+import { AgGridReact } from 'ag-grid-react'; 
+import "ag-grid-community/styles/ag-grid.css"; 
+import "ag-grid-community/styles/ag-theme-quartz.css"; 
 //import bcrypt from 'bcryptjs';
  
  
@@ -25,6 +28,7 @@ const UserManagement = ({ userName, role }) => {
 
     const [selectedRows, setSelectedRows] = useState([]);
     const [data, setData] = useState([]);
+    const [show, setShow] = useState(false);
     const [showForm, setShowForm] = useState(false);
     const modalRef = useRef();
     const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
@@ -39,7 +43,14 @@ const UserManagement = ({ userName, role }) => {
     const [Answer, setAnswer] = useState('');
     const [AnswerId, setAnswerId] = useState(0);
     const [roleIds, setRoleIds] = useState([]);
-    const [roles, setRole] = useState('');
+    const [roles, setRoles] = useState([]);
+    const [EditName, setEditName] = useState('');
+    const [EditEmail, setEditEmail] = useState('');
+    const [EditPassword, setEditPassword] = useState('');
+    const [EditQuesId, setEditQuesId] = useState('');
+    const [EditAnsId, setEditAnsId] = useState('');
+    const [EditRoleId, setEditRoleId] = useState('');
+    const [EditId, setEditId] = useState('');
     const [validationErrors, setValidationErrors] = useState({
       Name: '',
       Email: '',
@@ -47,11 +58,32 @@ const UserManagement = ({ userName, role }) => {
       ConfirmPassword: '',
     });
 
+    const [gridApi, setGridApi] = useState(null);
+    const [gridColumnApi, setGridColumnApi] = useState(null);
+
+    const onGridReady = (params) => {
+        console.log("Grid Ready");
+        setGridApi(params.api);
+    };
+    
+
     const navigate = useNavigate();
 
     const [ansId, setAnsId] = useState(0);
     const [invalid, setInvalid] = useState(false);
     const [passwordVisible, setPasswordVisible] = useState(false);
+
+    const handleClose = () => {
+      setShow(false);
+      setValidationErrors({
+        Name: '',
+        Email: '',
+        Password: '',
+        ConfirmPassword: '',
+      })
+      document.body.classList.remove('modal-open');
+  }
+  const handleShow = () => setShow(true);
 
     const handleForm = () => setShowForm(true);
     const handleCloseForm = () => {
@@ -76,9 +108,24 @@ const UserManagement = ({ userName, role }) => {
     
     useEffect(() => {
         getData();
+        getRoles();
     }, []);
 
     const answerToIdMap = new Map();
+
+    const getRoles = async()=>{
+      try {
+          const response = await authorizedFetch(`${api_url}/roles`);
+          if (response.ok) {
+              const data = await response.json();
+              setRoles(data);
+          } else {
+              console.error('Failed to fetch roles:', response.statusText);
+          }
+        } catch (error) {
+          console.error('Error fetching roles:', error);
+        }
+    }
 
     const handleSubmit = async(e) => {
       e.preventDefault();      
@@ -152,25 +199,8 @@ const UserManagement = ({ userName, role }) => {
       setPassword('');
       setIsLocked(0);
       setSecurityQuestionId(0);
-      setAnswerId('');
+      setAnswerId(0);
     }
-      const handleCheckboxChange = (id) => {
-        const updatedSelectedRows = [...selectedRows];
-        if (updatedSelectedRows.includes(id)) {
-          const index = updatedSelectedRows.indexOf(id);
-          updatedSelectedRows.splice(index, 1);
-        } else {
-          updatedSelectedRows.push(id);
-        }
-        setSelectedRows(updatedSelectedRows);
-      };
-
-      const handleSelectAll = (event) => {
-        const checked = event.target.checked;
-        const selectedIds = checked ? data.map(item => item.id) : [];
-    
-        setSelectedRows(selectedIds);
-      };
 
       const getData = async() =>{
         try{
@@ -193,8 +223,26 @@ const UserManagement = ({ userName, role }) => {
       document.body.classList.add('modal-open');
     }
 
-    const handleEdit = () =>{
-      console.log("edit");
+    const handleEdit = async(id) =>{
+      handleShow();
+      console.log("id"+id); 
+        document.body.classList.add('modal-open');
+        try {
+            const result = await authorizedFetch(`${api_url}/getUser/${id}`)
+            console.log("response:", result);
+            const data = await result.json();
+            setEditName(data.user.name);
+            setEditEmail(data.user.email);
+            setEditPassword(data.user.password);
+            setEditQuesId(data.user.securityQuestionId);
+            setEditAnsId(data.user.answerId);
+            setEditRoleId(data.user.role);
+            setEditId(id);
+        }
+        catch(error){
+            console.error('Error editing role:', error);
+            toast.error(error);
+        }
     }
 
     const handleRoleChange = (roleValue) =>{
@@ -204,6 +252,14 @@ const UserManagement = ({ userName, role }) => {
             setRoleIds([...roleIds, roleValue])
         }
     }
+
+    const handleEditRoleChange = (roleValue) =>{
+      if(EditRoleId.includes(roleValue)){
+          setEditRoleId(EditRoleId.filter(role => role !== roleValue))
+      }else{
+          setEditRoleId([...EditRoleId, roleValue])
+      }
+  }
 
     const handleQuestionChange = (event) => {
         setSecurityQuestionId(parseInt(event.target.value));
@@ -226,36 +282,6 @@ const UserManagement = ({ userName, role }) => {
         }
     }
 
-    const handleMultipleDelete = () => {
-      if (selectedRows.length === 0) {
-          alert('Please select rows to delete.');
-      } else {
-          setIsConfirmationDialogOpen(true);
-      }
-     
-    };
- 
-    const confirmDelete = () => {
-           
-        const url = `${local_url}/delete-multiple`;
-   
-        axios
-            .delete(url, { data: selectedRows })
-            .then((result) => {
-            toast.success('Selected users have been deleted');
-            const updatedData = data.filter((item) => !selectedRows.includes(item.id));
-            setData(updatedData);
-            setSelectedRows([]);
-            })
-            .catch((error) => {
-            console.error('Error deleting students:', error);
-            toast.error('Error deleting users');
-      })
-      .finally(() => {
-          setIsConfirmationDialogOpen(false);
-      });
-    };
- 
     const closeConfirmationDialog = () => {
         setIsConfirmationDialogOpen(false);
     };
@@ -264,6 +290,11 @@ const UserManagement = ({ userName, role }) => {
   const handleNameChange = (e) => {
     const inputValue = e.target.value;
     setName(inputValue);
+    validateName(inputValue);
+  };
+  const handleEditNameChange = (e) => {
+    const inputValue = e.target.value;
+    setEditName(inputValue);
     validateName(inputValue);
   };
 
@@ -276,10 +307,21 @@ const UserManagement = ({ userName, role }) => {
       setEmail(inputValue);
       validateEmail(inputValue);
   };
+  const handleEditEmailChange = (e) => {
+    const inputValue = e.target.value;
+    setEditEmail(inputValue);
+    validateEmail(inputValue);
+};
    
   const handlePasswordChange = (e) => {
     const inputValue = e.target.value;
     setPassword(inputValue);
+    validatePassword(inputValue);
+  };
+
+  const handleEditPasswordChange = (e) => {
+    const inputValue = e.target.value;
+    setEditPassword(inputValue);
     validatePassword(inputValue);
   };
 
@@ -371,10 +413,19 @@ const UserManagement = ({ userName, role }) => {
             <>
                 {/* <a href="#">View as admin</a> */}
                 <button className='render' onClick={()=>{navigate('/user')}}>View as user</button>
+                <button className='render' onClick={()=>{navigate('/role')}}>Role Management</button>
             </>
         );
-    // } else if (role.includes('Admin')) {
-    //     return <a className='render' href="#">View as Admin</a>;
+    }
+    else if(role.includes('Admin')){
+      return(
+          <>
+              <button className='render' onClick={()=>{navigate('/teacher')}}>Teacher Records</button>
+              <button className='render' onClick={()=>{navigate('/course')}}>Courses</button>
+              <button className='render' onClick={()=>{navigate('/role')}}>Role Management</button>
+              <button className='render' onClick={()=>{navigate('/schedule2')}}>Schedule</button>
+          </>
+      )
     } else if (role.includes('User')) {
         return <button className='render' onClick={()=>{navigate('/user')}}>View as User</button>;
     } else {
@@ -382,7 +433,105 @@ const UserManagement = ({ userName, role }) => {
     }
 };
 
-    
+    const handleCheckboxChange = (id) => {
+      console.log("enter");
+      const updatedSelectedRows = [...selectedRows];
+      if (updatedSelectedRows.includes(id)) {
+        const index = updatedSelectedRows.indexOf(id);
+        updatedSelectedRows.splice(index, 1);
+      } else {
+        updatedSelectedRows.push(id);
+      }
+      setSelectedRows(updatedSelectedRows);
+    };
+
+    const handleSelectionChanged = (event) => {
+      if(gridApi){
+        const selectedNodes = gridApi.getSelectedNodes();
+        console.log(selectedNodes);
+        const selectedData = selectedNodes.map(node => node.data);
+        console.log(selectedData);
+        setSelectedRows(selectedData);
+      }
+    };
+
+    const handleMultipleDelete = () => {
+      console.log("open");
+      setIsConfirmationDialogOpen(true);
+      console.log("open");
+    };
+
+    const confirmDelete = () => {
+      console.log(selectedRows);
+      const ids = selectedRows.map(row => row.id); 
+      console.log("ids"+ids);
+      axios.delete(`${local_url}/delete-multiple`, { data: ids })
+          .then(response => {
+              console.log('Selected users have been deleted.');
+              const updatedData = data.filter((item)=>!selectedRows.includes(item.id));
+              setData(updatedData);
+              setSelectedRows([]);
+              getData();
+          })
+          .catch(error => {
+              console.error('Error deleting students:', error);
+          })
+          .finally(() => {
+              setIsConfirmationDialogOpen(false);
+          });
+    };
+
+    const actionsCellRenderer = (params) => {
+      return (
+        <>
+          <button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>{ handleEdit(params.data.id)}}>Edit</button>
+        </>
+      );
+    };
+
+    const [colDefs, setColDefs] = useState([   
+        { headerCheckboxSelection: true, checkboxSelection: true, onSelectionChanged: () => {
+            const selectedRows = gridApi.api.getSelectedRows();
+            console.log("rows"+selectedRows)
+            const selectedIds = selectedRows.map(row => row.id);
+            console.log("ids"+selectedIds)
+            handleCheckboxChange(selectedIds);
+        }, width: 55 },
+        { headerName: "S.No.", valueGetter: "node.rowIndex + 1", width: 80 },
+        { headerName: "Name", field: "name" },
+        { headerName: "Email", field: "email" },
+        { headerName: "Role", field: "role"},
+        { headerName: "Security Question Id", field: "securityQuestionId" },
+        { headerName: "Answer Id", field: "answerId" },
+        { headerName: "Actions", cellRenderer: actionsCellRenderer },
+    ]);
+      
+    const handleUpdate = async() =>{
+      try{
+        const publicKey =`-----BEGIN PUBLIC KEY-----MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDE3/DkbE+9QX8UDShJD+DALJryS3L3shC/a8i0+O1H54sVcfdVQrwH3PpIZSORy7fkDzx2IXXXMkToq9rt6cZ5fiG1ortNIQEkg2wD2Sk8Go7I4fS9A+TpMBiV8cO4c51ROV2P6QdvWMC+LC2is7+a4ihMR8Wl621Iw90nWVkAZwIDAQAB-----END PUBLIC KEY-----`;
+        var rsa = forge.pki.publicKeyFromPem(publicKey); 
+        console.log(rsa);
+        var encryptedPassword = window.btoa(rsa.encrypt(EditPassword));
+        console.log(Password);
+        console.log(encryptedPassword);
+        const encoded = replacePlusWithEncoded(encryptedPassword);
+        const token = await getToken();
+          const config = {
+              headers: {
+                  'Authorization': `Bearer ${token}`
+              }
+          };
+          const result = await axios.put(`${api_url}/updateUser/${EditId}?id=${EditId}&Name=${EditName}&Email=${EditEmail}&Password=${encoded}&IsLocked=${0}&SecurityQuestionId=${EditQuesId}&AnswerId=${EditQuesId}&role=${EditRoleId}`, {}, config);
+          console.log("response:", result.data);
+            getData();
+            clear();
+            handleClose();
+            toast.success('User has been updated');
+        }catch(error){
+             toast.error(error);
+        }
+    }
+
   return (
     <Fragment>
         <ToastContainer />
@@ -503,16 +652,19 @@ const UserManagement = ({ userName, role }) => {
           </div> */}
           <div className="custom-col">
             <div className='roles'>
-            <label >Roles:</label>
-            <label className='role-check'>
-                <input type="checkbox" value="1" checked={roleIds.includes("1")} onChange={() => handleRoleChange("1")} />
-                &nbsp;Admin
-            </label>
-            <label className='role-check'>
-                <input type="checkbox" value="2" checked={roleIds.includes("2")} onChange={() => handleRoleChange("2")} />
-                &nbsp;User
-            </label>
-           </div>
+                <label>Roles:</label>
+                {roles.map((role) => (
+                    <label key={role.id} className='role-check'>
+                        <input
+                            type="checkbox"
+                            value={role.id}
+                            checked={roleIds.includes(role.id.toString())}
+                            onChange={() => handleRoleChange(role.id.toString())}
+                        />
+                        &nbsp;{role.roleName}
+                    </label>
+                ))}
+            </div>
         </div>
         </div>
         <div className='modal-footer'>
@@ -526,63 +678,114 @@ const UserManagement = ({ userName, role }) => {
       </div>
     )}
     </div>
-    <div className="table-container">
-        <table>
-            <thead>
-                <tr>
-                <th id='select-header'>
-                     <input
-                        className='select-checkbox'
-                        type="checkbox"
-                        onChange={handleSelectAll}
-                        checked={selectedRows.length === data.length && data.length !== 0}
-                    />
-                </th>
-                <th>S.No.</th>
-                <th>Name</th>
-                <th>Email</th>
-                {/* <th>Password</th>  */}
-                {/* <th>IsLocked</th> */}
-                <th>Role</th>
-                <th>SecurityQuestionId</th>
-                <th>AnswerId</th>
-                <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {
-                    data && data.length >0?
-                        data.map((item, index)=>{
-                             
-                            return(
-                                <tr key={index}>
-                                    <td>
-                                        <input
-                                        className='select-checkbox'
-                                        type="checkbox"
-                                        checked={selectedRows.includes(item.id)}
-                                        onChange={() => handleCheckboxChange(item.id)}
-                                        />
-                                    </td>
-                                    <td>{index+1}</td>
-                                    <td>{item.name}</td>
-                                    <td>{item.email}</td>
-                                    {/* <td>{item.password}</td> */}
-                                    {/* <td>{item.isLocked==0?"False":"True"}</td> */}
-                                    <td>{item.role}</td>
-                                    <td>{item.securityQuestionId}</td>
-                                    <td>{item.answerId}</td>
-                                    <td colSpan={2}>
-                                    <Tooltip title="Edit Details"><span><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>  {handleEdit(item.id);}}><BorderColorIcon /></button></span></Tooltip>&nbsp;
-                                    </td>
-                                </tr>
-                            )
-                        })
-                        :
-                        'Loading..'
-                }
-            </tbody>
-        </table>
+    <div className="ag-theme-quartz" style={{ width: '100%',height: 300 }}>
+        <AgGridReact
+        columnDefs={colDefs}
+        rowData={data}
+        rowSelection="multiple"
+        rowHeight={30}
+        headerHeight={40}
+        pagination={true}
+        paginationPageSize={2}
+        paginationPageSizeSelector={[2, 5, 10, 20, 50, 100]}
+        defaultColDef={{
+            sortable: true,
+            width: 195,
+            filter:true,
+        }}
+        onGridReady={onGridReady}
+        domLayout="autoHeight"
+        onSelectionChanged={handleSelectionChanged}
+        />
+      </div>
+      <div>
+        {show && (
+            <div className='modal-container' ref={modalRef} >
+            <div className='modal-header'>
+                <span class="close-btn" onClick = {handleClose}>&times;</span>
+                <h2>Edit User</h2>
+            </div>
+            <div className='modal-body'>
+            <div className="custom-col">
+              {validationErrors.Name && (
+                  <div className='invalid-feedback'>{validationErrors.Name}</div>
+              )}
+              <input type='text' className={`form-control ${validationErrors.Name ? 'is-invalid' : ''}`} placeholder='Enter name' value={EditName} 
+              onChange={handleEditNameChange}/>
+              </div>
+              <div className="custom-col">
+              {validationErrors.Email && (
+                  <div className='invalid-feedback'>{validationErrors.Email}</div>
+              )}
+              <input type='text' className={`form-control ${validationErrors.Email ? 'is-invalid' : ''}`} placeholder='Enter email' value={EditEmail}
+              onChange={handleEditEmailChange} />
+              </div>
+              {/*<div className="custom-col" style={{ position: 'relative' }}>
+                {validationErrors.Password && (
+                  <div className='invalid-feedback'>{validationErrors.Password}</div>
+                )}
+                <div id='pass' style={{ position: 'relative' }}> 
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    className={`form-control ${validationErrors.Password ? 'is-invalid' : ''}`}
+                    placeholder='Enter password'
+                    value={EditPassword}
+                    onChange={handleEditPasswordChange}
+                    style={{ paddingRight: '5px' }} 
+                  />
+                  <span 
+                    className="password-toggle" 
+                    onClick={togglePasswordVisibility}
+                  >
+                    <FontAwesomeIcon icon={passwordVisible ? faEyeSlash : faEye} />
+                  </span>
+                </div> 
+              </div>*/}
+              {/* <div className="custom-col">
+                {errorMessage && <div style={{ color: 'red' }}>{errorMessage}</div>}
+                <input id='confirm-pass' type="password" value={ConfirmPassword} onChange={handleConfirmPasswordChange} placeholder="Confirm Password" />
+              </div> 
+              <div className="custom-col">
+                  <label htmlFor='questionSelect'>Security question </label>
+                  <select id='questionSelect' value={EditQuesId} onChange={handleQuestionChange}>
+                        <option value="0">- -</option>
+                        <option value="1">What is the name of your first school?</option>
+                        <option value="2">Who is your Favourite author?</option>
+                        <option value="3">Where were you born?</option>
+                  </select>
+              </div>
+              <div className="custom-col">
+                    <input type='text' className='form-control' placeholder='Enter your answer' value={EditAnsId}
+                    onChange = {(e)=> handleUserInput(e.target.value)} />
+              </div> */}
+              <br></br>
+              <div className="custom-col">
+                <div className='roles'>
+                    <label>Roles:</label>
+                    {roles.map((role) => (
+                        <label key={role.id} className='role-check'>
+                            <input
+                                type="checkbox"
+                                value={role.id}
+                                checked={EditRoleId.includes(role.id.toString())}
+                                onChange={() => handleEditRoleChange(role.id.toString())}
+                            />
+                            &nbsp;{role.roleName}
+                        </label>
+                    ))}
+                </div>
+            </div>
+            </div>
+            <div className='modal-footer'>
+                <button  className='custom-btn custom-btn-secondary-close' onClick={handleClose}>
+                    Close
+                </button>
+                <button className='custom-btn custom-btn-primary' onClick={handleUpdate}>
+                    Save
+                </button>
+                </div>
+        </div>
+        )}
         </div>
     <div>
         <Footer></Footer>

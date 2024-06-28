@@ -21,6 +21,10 @@ import SearchBar from './SearchBar';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
 import PersonIcon from '@mui/icons-material/Person';
+import { AgGridReact } from 'ag-grid-react'; 
+import "ag-grid-community/styles/ag-grid.css"; 
+import "ag-grid-community/styles/ag-theme-quartz.css"; 
+
 
 
 const CRUD = ({ userName, role }) => {
@@ -131,6 +135,14 @@ const CRUD = ({ userName, role }) => {
     const [cityName, setCityName] = useState('');
     const modalRef = useRef();
     const [invalid, setInvalid] = useState(false);
+    const [gridApi, setGridApi] = useState(null);
+    const [gridColumnApi, setGridColumnApi] = useState(null);
+
+    const onGridReady = (params) => {
+        console.log("Grid Ready");
+        setGridApi(params.api);
+    };
+    
 
     const navigate = useNavigate();
 
@@ -154,6 +166,10 @@ const CRUD = ({ userName, role }) => {
         };
     }, [pageNumber, pageSize, searchTerm, sortAttribute, sortOrder]);
 
+    useEffect(() => {
+        console.log(`Dialog state is: ${isConfirmationDialogOpen}`);
+      }, [isConfirmationDialogOpen]);
+
 
     const getStates = async () => {
         try {
@@ -175,8 +191,13 @@ const CRUD = ({ userName, role }) => {
 
     const getCourses = async()=>{
         try {
-            const response = await axios.get(`${api_url}/courses`);
-            setCourses(response.data);
+            const response = await authorizedFetch(`${api_url}/courses`);
+            if (response.ok) {
+                const data = await response.json();
+                setCourses(data);
+            } else {
+                console.error('Failed to fetch courses:', response.statusText);
+            }
           } catch (error) {
             console.error('Error fetching courses:', error);
           }
@@ -189,17 +210,21 @@ const CRUD = ({ userName, role }) => {
         try {
             const result = await authorizedFetch(`${student_url}?pageNumber=${pageNumber}&pageSize=${pageSize}&search=${searchTerm}&sortAttribute=${sortAttribute}&sortOrder=${sortOrder}`)
             console.log("response:", result);
-            const data = await result.json();
-            if(data.title === "Not Found"){
-                if (!toastId) {
-                    toastId = toast.error("No such record");
+            if (!result.ok) {
+                if (result.status === 404) {
+                    setData([]); 
+                    setCode(''); 
+                    setTotalPages(0);
+                    return;
+                } else {
+                    throw new Error(`Failed to fetch data: ${result.status}`);
                 }
             }
-            else{
-                setData(data.data)
-                setCode(data.data[0]?.code);    
-                setTotalPages(data.totalPages);
-            }
+            
+            const data = await result.json();
+            setData(data.data);
+            setCode(data.data[0]?.code);
+            setTotalPages(data.totalPages);
        
         if (shouldExport) {
             exportToExcel(result.data.data, 'Student_Record');
@@ -340,47 +365,6 @@ const CRUD = ({ userName, role }) => {
             toast.error(error);
         }
     }
-
-    const handleCheckboxChange = (id) => {
-        const updatedSelectedRows = [...selectedRows];
-        if (updatedSelectedRows.includes(id)) {
-          const index = updatedSelectedRows.indexOf(id);
-          updatedSelectedRows.splice(index, 1);
-        } else {
-          updatedSelectedRows.push(id);
-        }
-        setSelectedRows(updatedSelectedRows);
-    };
-
-    const handleMultipleDelete = () => {
-        if (selectedRows.length === 0) {
-            alert('Please select rows to delete.');
-        } else {
-            setIsConfirmationDialogOpen(true);
-        }
-        
-    };
-  
-    const confirmDelete = () => {
-            
-        const url = `${student_url}/delete-multiple`;
-    
-        axios
-            .delete(url, { data: selectedRows })
-            .then((result) => {
-            toast.success('Selected students have been deleted');
-            const updatedData = data.filter((item) => !selectedRows.includes(item.id));
-            setData(updatedData);
-            setSelectedRows([]); 
-            })
-            .catch((error) => {
-            console.error('Error deleting students:', error);
-            toast.error('Error deleting students');
-        })
-        .finally(() => {
-            setIsConfirmationDialogOpen(false);
-        });
-    };
 
     const closeConfirmationDialog = () => {
         setIsConfirmationDialogOpen(false);
@@ -528,12 +512,39 @@ const CRUD = ({ userName, role }) => {
                     <button className='render' onClick={()=>{navigate('/user')}}>View as user</button>
                     <button className='render' onClick={()=>{navigate('/teacher')}}>Teacher Records</button>
                     <button className='render' onClick={()=>{navigate('/course')}}>Courses</button>
+                    <button className='render' onClick={()=>{navigate('/role')}}>Role Management</button>
+                    <button  className='render' onClick={()=>{navigate('/userManagement')}}>User Records</button>
+                    {/* <button className='render' onClick={()=>{navigate('/schedule')}}>Schedule</button> */}
+                    <button className='render' onClick={()=>{navigate('/schedule2')}}>Schedule</button>
+                    <button className='render' onClick={()=>{navigate('/calendar')}}>Calendar</button>
                 </>
             );
-        // } else if (role.includes('Admin')) {
-        //     return <a href="#">View as Admin</a>;
-        } else if (role.includes('User')) {
-            return <button className='render' onClick={()=>{navigate('/user')}}>View as User</button>;
+        } 
+        else if(role.includes('Admin')){
+            return(
+                <>
+                    <button className='render' onClick={()=>{navigate('/teacher')}}>Teacher Records</button>
+                    <button className='render' onClick={()=>{navigate('/course')}}>Courses</button>
+                    <button className='render' onClick={()=>{navigate('/role')}}>Role Management</button>
+                    <button  className='render' onClick={()=>{navigate('/userManagement')}}>User Records</button>
+                    <button className='render' onClick={()=>{navigate('/schedule2')}}>Schedule</button>
+                </>
+            )
+        }
+        else if (role.includes('Teacher')) {
+            return (
+                <>
+                    <button className='render' onClick={()=>{navigate('/schedule2')}}>Schedule</button>
+                </>
+            )
+        } 
+        else if (role.includes('User')) {
+            return (
+                <>
+                <button className='render' onClick={()=>{navigate('/user')}}>View as User</button>;
+                <button  className='render' onClick={()=>{navigate('/userManagement')}}>User Records</button>
+                </>
+            )
         } else {
             return null; 
         }
@@ -629,13 +640,6 @@ const CRUD = ({ userName, role }) => {
         const inputValue = e.target.value;
         setMob(inputValue);
         validateMobile(inputValue);
-    };
-
-    const handleSelectAll = (event) => {
-        const checked = event.target.checked;
-        const selectedIds = checked ? data.map(item => item.id) : [];
-    
-        setSelectedRows(selectedIds);
     };
 
     const validateName = (value) => {
@@ -801,8 +805,96 @@ const CRUD = ({ userName, role }) => {
             });
         }
     };
-    
+
+    const handleCheckboxChange = (id) => {
+        console.log("enter");
+        const updatedSelectedRows = [...selectedRows];
+        if (updatedSelectedRows.includes(id)) {
+          const index = updatedSelectedRows.indexOf(id);
+          updatedSelectedRows.splice(index, 1);
+        } else {
+          updatedSelectedRows.push(id);
+        }
+        setSelectedRows(updatedSelectedRows);
+    };
+
+    const handleSelectionChanged = (event) => {
+       if(gridApi){
+        const selectedNodes = gridApi.getSelectedNodes();
+        console.log(selectedNodes);
+        const selectedData = selectedNodes.map(node => node.data);
+        console.log(selectedData);
+        setSelectedRows(selectedData);
+       }
+    };
+
+    const handleMultipleDelete = () => {
+        console.log("open");
+        setIsConfirmationDialogOpen(true);
+        console.log("open");
+    };
+
+    const confirmDelete = () => {
+        console.log(selectedRows);
+        const ids = selectedRows.map(row => row.id); 
+        console.log("ids"+ids);
+        axios.delete(`${student_url}/delete-multiple`, { data: ids })
+            .then(response => {
+                console.log('Selected students have been deleted.');
+                const updatedData = data.filter((item)=>!selectedRows.includes(item.id));
+                setData(updatedData);
+                setSelectedRows([]);
+                getData(pageNumber, pageSize, searchTerm, sortOrder);
+            })
+            .catch(error => {
+                console.error('Error deleting students:', error);
+            })
+            .finally(() => {
+                setIsConfirmationDialogOpen(false);
+            });
+    };
+
+    const genderCellRenderer = (params) => {
+        return params.value === 0 ? "Male" : "Female";
+      };
+
+      const actionsCellRenderer = (params) => {
+        return (
+          <>
+            <button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() =>{getCitiesByState(params.data.state); getClassByCourse(params.data.courseId); getSections(params.data.classId); handleEdit(params.data.id)}}>Edit</button>
+          </>
+        );
+      };
+
     const startIndex = (pageNumber - 1) * pageSize;
+    const [colDefs, setColDefs] = useState([   
+        { headerCheckboxSelection: true, checkboxSelection: true, onSelectionChanged: () => {
+            const selectedRows = gridApi.api.getSelectedRows();
+            console.log("rows"+selectedRows)
+            const selectedIds = selectedRows.map(row => row.id);
+            console.log("ids"+selectedIds)
+            handleCheckboxChange(selectedIds);
+        }, pinned: 'left', width: 40 },
+        { headerName: "S.No.", valueGetter: "node.rowIndex + 1", width: 80, pinned: 'left' },
+        { headerName: "Student Code", field: "code", pinned: 'left' },
+        { headerName: "Name", field: "name", pinned: 'left' },
+        { headerName: "Email", field: "email" },
+        { headerName: "Mobile.", field: "mobile"},
+        { headerName: "Address 1", field: "address1" },
+        { headerName: "Address 2", field: "address2" },
+        { headerName: "State", field: "stateName" },
+        { headerName: "City", field: "cityName" },
+        { headerName: "Gender", field: "gender", cellRenderer: genderCellRenderer },
+        { headerName: "Marital Status", field: "status", cellRenderer: (params) => mapStatusValueToLabel(params.value) },
+        { headerName: "Course", field: "courseName" },
+        { headerName: "Class", field: "className" },
+        { headerName: "Section", field: "sectionName" },
+        { headerName: "Actions", cellRenderer: actionsCellRenderer },
+      ]);
+
+
+      //cellRenderer: genderCellRenderer 
+      //cellRenderer: actionsCellRenderer 
 
   return (
       <Fragment>
@@ -827,7 +919,6 @@ const CRUD = ({ userName, role }) => {
                 <button className="dropbtn u"><PersonIcon className='icon'/><h4>{userName}</h4></button>
                 <div className="dropdown-content">
                     <button className='render' onClick={()=>{navigate('/')}}>Logout</button>
-                    <button  className='render' onClick={()=>{navigate('/userManagement')}}>User Records</button>
                     {renderViewAsOptions()}
                 </div>
             </div>
@@ -855,7 +946,7 @@ const CRUD = ({ userName, role }) => {
                     </div> 
                 </div>
             </div> */}
-            <div className='viewingAs'><h4>Viewing as Admin</h4></div>
+            <div className='viewingAs'><h4>Viewing as {role[0]}</h4></div>
         <SearchBar handleSearch={handleSearch} />
         <button className='custom-btn custom-btn-primary' onClick={handleExportClick}><SaveIcon /></button>
         </div>
@@ -995,113 +1086,37 @@ const CRUD = ({ userName, role }) => {
         </div>
         )}
         </div>
-        <div className="table-container">
-        <table>
-            <thead>
-                <tr>
-                <th id='select-header'>
-                     <input
-                        className='select-checkbox'
-                        type="checkbox"
-                        onChange={handleSelectAll}
-                        checked={selectedRows.length === data.length && data.length !== 0}
-                    />
-                </th>
-                <th>S.No.</th>
-                <th onClick={() => handleSorting('code')} className="sortable-header">
-                    <span className="header-text">Student Code</span>
-                    <span className='aero'>
-                        {sortAttribute !== 'code'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
-                    </span>
-                </th>
-                <th onClick={() => handleSorting('name')} className="sortable-header">
-                    <span className="header-text">Name</span>
-                    <span className='aero'>
-                        {sortAttribute !== 'name'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
-                    </span>
-                </th>
-                <th onClick={() => handleSorting('email')} className="sortable-header">
-                    <span className="header-text">Email</span>
-                    <span className='aero'>
-                        {sortAttribute !== 'email'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
-                    </span>
-                </th>
-                <th>Mobile</th>
-                <th onClick={() => handleSorting('address1')} className="sortable-header">
-                    <span className="header-text">Address 1</span>
-                    <span className='aero'>
-                        {sortAttribute !== 'address1'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
-                    </span>
-                </th>
-                <th onClick={() => handleSorting('address2')} className="sortable-header">
-                    <span className="header-text">Address 2</span>
-                    <span className='aero'>
-                        {sortAttribute !== 'address2'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
-                    </span>
-                </th>
-                <th onClick={() => handleSorting('stateName')} className="sortable-header">
-                    <span className="header-text">State</span>
-                    <span className='aero'>
-                    {sortAttribute !== 'stateName'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
-                    </span>
-                </th>
-                <th onClick={() => handleSorting('city')} className="sortable-header">
-                    <span className="header-text">City</span>
-                    <span className='aero'>
-                        {sortAttribute !== 'city'?<SwapVertIcon />:(sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />)}
-                    </span>
-                </th>
-                <th>Gender</th>
-                <th>Marital Status</th>
-                <th>Course</th>
-                <th>Class</th>
-                <th>Section</th>
-                <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {
-                    data && data.length >0?
-                        data.map((item, index)=>{
-                            const serialNumber = startIndex + index + 1;
-                            return(
-                                <tr key={serialNumber}>
-                                    <td>
-                                        <input
-                                        className='select-checkbox'
-                                        type="checkbox"
-                                        checked={selectedRows.includes(item.id)}
-                                        onChange={() => handleCheckboxChange(item.id)}
-                                        />
-                                    </td>
-                                    <td>{serialNumber}</td>
-                                    <td>{item.code}</td>
-                                    <td>{item.name}</td>
-                                    <td>{item.email}</td>
-                                    <td>{item.mobile}</td>
-                                    <td>{item.address1}</td>
-                                    <td>{item.address2}</td>
-                                    <td>{item.stateName}</td>
-                                    <td>{item.cityName}</td>
-                                    <td>{item.gender === 0 ? "Male" : "Female"}</td>
-                                    <td>{mapStatusValueToLabel(item.status)}</td>
-                                    <td>{item.courseName}</td>
-                                    <td>{item.className}</td>
-                                    <td>{item.sectionName}</td>
-                                    <td colSpan={2}>
-                                    <Tooltip title="Edit Details"><span><button className='custom-btn custom-btn-primary' id='edit-btn' onClick={() => {getCitiesByState(item.state); getClassByCourse(item.courseId); getSections(item.classId); handleEdit(item.id);}}><BorderColorIcon /></button></span></Tooltip>&nbsp;
-                                        {/* <button className='btn btn-danger' onClick={() => handleDelete(item.id)}>Delete</button> */}
-                                    </td>
-                                </tr>
-                            )
-                        })
-                        :
-                        'Loading..'
-                }
-            </tbody>
-        </table>
+        <div className="ag-theme-quartz" style={{ height: 300 }}>
+        <AgGridReact
+        columnDefs={colDefs}
+        rowData={data}
+        rowSelection="multiple"
+        rowHeight={30}
+        headerHeight={40}
+        pagination={true}
+        paginationPageSize={2}
+        paginationPageSizeSelector={[2, 5, 10, 20, 50, 100]}
+        defaultColDef={{
+            sortable: true,
+            width: 140,
+            filter:true,
+        }}
+        onGridReady={onGridReady}
+        domLayout="autoHeight"
+        onSelectionChanged={handleSelectionChanged}
+        />
         </div>
-        <div className='page'>
+        {/* <div>
+            <span>Page Size:</span>
+            <select onChange={(e) => onPageSizeChanged(e.target.value)}>
+                <option value="2">2</option>
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div> */}
+        {/* <div className='page'>
         <div className='page-buttons'>
             <Tooltip title='Previous Page'>
             <button className='custom-btn page-btn' onClick={handlePrevious} disabled={pageNumber === 1}><KeyboardDoubleArrowLeftIcon /></button>
@@ -1117,7 +1132,7 @@ const CRUD = ({ userName, role }) => {
             {renderDropdownOptions()}
             </select>
         </div>
-        </div>
+        </div> */}
         
         <div>
         {show && (
